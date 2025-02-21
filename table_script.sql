@@ -144,18 +144,18 @@ raise notice 'Создание общих справочников и напол
 -- Таблица для проверки входных данных
 create table public.measure_settings(
 	setting_name character varying(100) primary key not null,
-	setting_value numeric(8,2) not null
+	setting_value character varying(100)  not null
 );
 
 
-insert into public.measure_settings(setting_name,setting_value) values ('temperature_const',15.9);
-insert into public.measure_settings(setting_name,setting_value) values ('pressure_const',750);
-insert into public.measure_settings(setting_name,setting_value) values ('temperature_min',-58);
-insert into public.measure_settings(setting_name,setting_value) values ('temperature_max',58);
-insert into public.measure_settings(setting_name,setting_value) values ('pressure_min',500);
-insert into public.measure_settings(setting_name,setting_value) values ('pressure_max',900);
-insert into public.measure_settings(setting_name,setting_value) values ('wind_direction_min',0);
-insert into public.measure_settings(setting_name,setting_value) values ('wind_direction_max',59);
+insert into public.measure_settings(setting_name,setting_value) values ('temperature_const','15.9');
+insert into public.measure_settings(setting_name,setting_value) values ('pressure_const','750');
+insert into public.measure_settings(setting_name,setting_value) values ('temperature_min','-58');
+insert into public.measure_settings(setting_name,setting_value) values ('temperature_max','58');
+insert into public.measure_settings(setting_name,setting_value) values ('pressure_min','500');
+insert into public.measure_settings(setting_name,setting_value) values ('pressure_max','900');
+insert into public.measure_settings(setting_name,setting_value) values ('wind_direction_min','0');
+insert into public.measure_settings(setting_name,setting_value) values ('wind_direction_max','59');
 
 
 
@@ -242,10 +242,9 @@ end;
 =======================================
 */
 begin 
-	-- получить константу
 	CREATE OR REPLACE FUNCTION public.get_setting(
 		input_setting_name character varying)
-		RETURNS numeric
+		RETURNS  character varying(100)
 		LANGUAGE 'plpgsql'
 		COST 100
 		VOLATILE PARALLEL UNSAFE
@@ -255,6 +254,24 @@ begin
 	begin
 	select setting_value from public.measure_settings where setting_name = input_setting_name limit 1 into ret;
 	return ret;
+
+	end;
+	$BODY$;
+
+
+	-- получить константу
+	CREATE OR REPLACE FUNCTION public.get_setting_num(
+		input_setting_name character varying)
+		RETURNS numeric
+		LANGUAGE 'plpgsql'
+		COST 100
+		VOLATILE PARALLEL UNSAFE
+	AS $BODY$
+	declare 
+		ret character varying(100);
+	begin
+	ret:=public.get_setting(input_setting_name);
+	return ret::numeric(8,2);
 
 	end;
 	$BODY$;
@@ -271,7 +288,7 @@ begin
 		VOLATILE PARALLEL UNSAFE
 	AS $BODY$
 	begin
-		return public.get_setting('temperature_max')>temperature AND public.get_setting('temperature_min')<temperature AND public.get_setting('pressure_max')>pressure AND public.get_setting('pressure_min')<pressure AND public.get_setting('wind_direction_max')>wind_direction AND public.get_setting('wind_direction_min')<wind_direction;
+		return public.get_setting_num('temperature_max')>temperature AND public.get_setting_num('temperature_min')<temperature AND public.get_setting_num('pressure_max')>pressure AND public.get_setting_num('pressure_min')<pressure AND public.get_setting_num('wind_direction_max')>wind_direction AND public.get_setting_num('wind_direction_min')<wind_direction;
 	end;
 	$BODY$;
 
@@ -317,7 +334,7 @@ begin
 	declare 
 		tmp_pressure numeric(8,2);
 	begin
-		tmp_pressure:= pressure-public.get_setting('pressure_const');
+		tmp_pressure:= pressure-public.get_setting_num('pressure_const');
 		if tmp_pressure < 0 then
 			tmp_pressure:=tmp_pressure*(-1)+500;
 		end if;
@@ -341,7 +358,7 @@ begin
 		select temperature,correction from public.calc_temperatures_correction where temperature <= temperature_inp order by temperature desc limit 1 into borders.x0,borders.y0;
 		select temperature,correction from public.calc_temperatures_correction where temperature > temperature_inp order by temperature limit 1 into borders.x1,borders.y1;
 		t_delta:=temperature_inp+((temperature_inp-borders.x0)*(borders.y1-borders.y0)/(borders.x1-borders.x0)+borders.y0);
-		return round(t_delta-public.get_setting('temperature_const'));
+		return round(t_delta-public.get_setting_num('temperature_const'));
 	end;
 	$BODY$;
 
@@ -358,7 +375,7 @@ begin
 	end;
 	$BODY$;
 end;
-commit;
+
 
 
 
@@ -382,7 +399,7 @@ declare
 	pressure_param numeric(8,2);
 	wind_param numeric(8,2);
 	wind_speed_param numeric (8,2);
-	use numeric;
+	emploeeid  numeric;
 	u_id integer;
 begin
 
@@ -399,12 +416,12 @@ begin
 		pressure_param:=floor(random()*(900-500)+500);
 		wind_param:=floor(random()*(59-0)+0);
 		wind_speed_param:=floor(random()*(15-0)+0);
-		use:=floor(random()*(4-1)+1);
+		emploeeid :=floor(random()*(4-1)+1);
 
 		insert into public.measurment_input_params(measurment_type_id,height,temperature,pressure,wind_direction,wind_speed) values(1,height_param,temp_param,pressure_param,wind_param,wind_speed_param);
 		select id,height,temperature,pressure,wind_direction,wind_speed from public.measurment_input_params limit 1 offset var_index into u_id,height_param,temp_param,pressure_param,wind_param,wind_speed_param;
 
-		insert into public.measurment_baths(emploee_id, measurment_input_param_id, started) values(use,u_id,now());
+		insert into public.measurment_baths(emploee_id, measurment_input_param_id, started) values(emploeeid ,u_id,now());
 
 		
 		raise notice 'h: %, temp: %, pres: %, wind_dir: %, wind_speed: %',height_param,temp_param,pressure_param,wind_param,wind_speed_param;
