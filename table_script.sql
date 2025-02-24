@@ -105,7 +105,8 @@ create table measurment_input_params
 	temperature numeric(8,2) default 0,
 	pressure numeric(8,2) default 0,
 	wind_direction numeric(8,2) default 0,
-	wind_speed numeric(8,2) default 0
+	wind_speed numeric(8,2) default null,
+	bullet_demolition_range numeric(8,2) default null
 );
 
 insert into measurment_input_params(id, measurment_type_id, height, temperature, pressure, wind_direction,wind_speed )
@@ -149,6 +150,10 @@ insert into public.measure_settings(setting_name,setting_value) values ('pressur
 insert into public.measure_settings(setting_name,setting_value) values ('pressure_max','900');
 insert into public.measure_settings(setting_name,setting_value) values ('wind_direction_min','0');
 insert into public.measure_settings(setting_name,setting_value) values ('wind_direction_max','59');
+insert into public.measure_settings(setting_name,setting_value) values ('wind_speed_min','0');
+insert into public.measure_settings(setting_name,setting_value) values ('wind_speed_max','15');
+insert into public.measure_settings(setting_name,setting_value) values ('bullet_demolition_min','0');
+insert into public.measure_settings(setting_name,setting_value) values ('bullet_demolition_max','150');
 
 
 
@@ -270,6 +275,31 @@ begin
 	$BODY$;
 
 
+	-- проверить конкретный параметр
+	CREATE OR REPLACE FUNCTION public.verify_param(
+		parameter numeric(8,2),
+		parameter_name character varying(100),
+		lower_border numeric(8,2),
+		upper_border numeric(8,2)
+		)
+		RETURNS boolean
+		LANGUAGE 'plpgsql'
+		COST 100
+		VOLATILE PARALLEL UNSAFE
+	AS $BODY$
+	declare 
+		ret boolean;
+	begin
+		ret:=parameter>=lower_border AND parameter<=upper_border;
+		if NOT ret then
+			raise exception 'parameter % was written wrong',parameter_name;
+		end if;
+		return ret;
+	end;
+	$BODY$;
+
+
+
 	-- проверить данные
 	CREATE OR REPLACE FUNCTION public.verify(
 		temperature numeric(8,2),
@@ -281,7 +311,7 @@ begin
 		VOLATILE PARALLEL UNSAFE
 	AS $BODY$
 	begin
-		return public.get_setting_num('temperature_max')>temperature AND public.get_setting_num('temperature_min')<temperature AND public.get_setting_num('pressure_max')>pressure AND public.get_setting_num('pressure_min')<pressure AND public.get_setting_num('wind_direction_max')>wind_direction AND public.get_setting_num('wind_direction_min')<wind_direction;
+		return public.verify_param(temperature,'temperature',public.get_setting_num('temperature_min'),public.get_setting_num('temperature_max')) AND  public.verify_param(pressure,'pressure',public.get_setting_num('pressure_min'),public.get_setting_num('pressure_max')) AND  public.verify_param(temperature,'wind_direction',public.get_setting_num('wind_direction_min'),public.get_setting_num('wind_direction_max'));
 	end;
 	$BODY$;
 
@@ -391,9 +421,10 @@ declare
 	temp_param numeric(8,2);
 	pressure_param numeric(8,2);
 	wind_param numeric(8,2);
-	wind_speed_param numeric (8,2);
+	dependent_param numeric (8,2);
 	emploeeid  numeric;
 	u_id integer;
+	device boolean;
 begin
 
 
@@ -408,16 +439,27 @@ begin
 		temp_param:=floor(random()*(58+58)-58);
 		pressure_param:=floor(random()*(900-500)+500);
 		wind_param:=floor(random()*(59-0)+0);
-		wind_speed_param:=floor(random()*(15-0)+0);
+		
 		emploeeid :=floor(random()*(4-1)+1);
+		device:=random()>0.5;
 
-		insert into public.measurment_input_params(measurment_type_id,height,temperature,pressure,wind_direction,wind_speed) values(1,height_param,temp_param,pressure_param,wind_param,wind_speed_param);
-		select id,height,temperature,pressure,wind_direction,wind_speed from public.measurment_input_params limit 1 offset var_index into u_id,height_param,temp_param,pressure_param,wind_param,wind_speed_param;
+		if device then
+			begin 
+				dependent_param:=floor(random()*(15-0)+0);
+				insert into public.measurment_input_params(measurment_type_id,height,temperature,pressure,wind_direction,wind_speed) values(1,height_param,temp_param,pressure_param,wind_param,dependent_param);
+			end;
+		else
+			begin
+				dependent_param:=floor(random()*(150-0)+0);
+				insert into public.measurment_input_params(measurment_type_id,height,temperature,pressure,wind_direction,bullet_demolition_range) values(1,height_param,temp_param,pressure_param,wind_param,dependent_param);
+			end;
+		end if;
+		select id,height,temperature,pressure,wind_direction,wind_speed from public.measurment_input_params limit 1 offset var_index into u_id,height_param,temp_param,pressure_param,wind_param,dependent_param;
 
 		insert into public.measurment_baths(emploee_id, measurment_input_param_id, started) values(emploeeid ,u_id,now());
 
 		
-		raise notice 'h: %, temp: %, pres: %, wind_dir: %, wind_speed: %',height_param,temp_param,pressure_param,wind_param,wind_speed_param;
+		raise notice 'h: %, temp: %, pres: %, wind_dir: %, dependent: %',height_param,temp_param,pressure_param,wind_param,dependent_param;
 	end;
 	end loop;
 	-- raise notice 'тестовые данные готовы';
