@@ -29,6 +29,7 @@ begin
 	drop table if exists public.measurment_types;
 	drop table if exists public.military_ranks;
 	drop table if exists public.calc_temperature_air;
+	drop table if exists public.calc_air_table_correction;
 	-- Константы
 	drop table if exists public.measure_settings;
 
@@ -161,7 +162,7 @@ insert into public.measure_settings(setting_name,setting_value) values ('bullet_
 -- Таблица для расчета поправки температуры
 CREATE TABLE public.calc_temperature_air 
 (
-	id integer not null default nextval('public.calc_temperature_air_seq'),
+	id integer primary key not null default nextval('public.calc_temperature_air_seq'),
 	measurment_types_id integer not null,
 	height integer not null,
 	is_positive boolean not null,
@@ -222,6 +223,42 @@ values (400,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
 insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
 values (400,1,False,array[-1,-2,-2,-3,-4,-4,-4,-4,-5,-6,-14,-20,-27,-34]);
 
+
+-- шапка таблицы (по ней выбираем индекс значения и считаем интерполяцию)
+CREATE TABLE IF NOT EXISTS public.calc_air_table_correction
+(
+    temperature integer primary key NOT NULL,
+    index integer NOT NULL,
+)
+
+insert into public.calc_air_table_correction (temperature,index) 
+values (1,1);
+insert into public.calc_air_table_correction (temperature,index) 
+values (2,2);
+insert into public.calc_air_table_correction (temperature,index) 
+values (3,3);
+insert into public.calc_air_table_correction (temperature,index) 
+values (4,4);
+insert into public.calc_air_table_correction (temperature,index) 
+values (5,5);
+insert into public.calc_air_table_correction (temperature,index) 
+values (6,6);
+insert into public.calc_air_table_correction (temperature,index) 
+values (7,7);
+insert into public.calc_air_table_correction (temperature,index) 
+values (8,8);
+insert into public.calc_air_table_correction (temperature,index) 
+values (9,9);
+insert into public.calc_air_table_correction (temperature,index) 
+values (10,10);
+insert into public.calc_air_table_correction (temperature,index) 
+values (20,11);
+insert into public.calc_air_table_correction (temperature,index) 
+values (30,12);
+insert into public.calc_air_table_correction (temperature,index) 
+values (40,13);
+insert into public.calc_air_table_correction (temperature,index) 
+values (50,14);
 
 raise notice 'Создание общих констант для рассчетов выполнено успешно';
 
@@ -381,6 +418,22 @@ begin
 	end;
 	$BODY$;
 
+	-- проверить данные без исключений
+	CREATE OR REPLACE FUNCTION public.verify_without_bool(
+		temperature numeric(8,2),
+		pressure numeric(8,2),
+		wind_direction numeric(8,2))
+		RETURNS boolean
+		LANGUAGE 'plpgsql'
+		COST 100
+		VOLATILE PARALLEL UNSAFE
+	AS $BODY$
+	begin
+		return public.verify_param(temperature,'temperature',public.get_setting_num('temperature_min'),public.get_setting_num('temperature_max')) AND  public.verify_param(pressure,'pressure',public.get_setting_num('pressure_min'),public.get_setting_num('pressure_max')) AND  public.verify_param(temperature,'wind_direction',public.get_setting_num('wind_direction_min'),public.get_setting_num('wind_direction_max'));
+		exception when others then
+		return 0;
+	end;
+	$BODY$;
 
 
 	-- получить тип из параметров
@@ -530,6 +583,22 @@ begin
 	end loop;
 	-- raise notice 'тестовые данные готовы';
 	
+end$$;
+
+
+do$$
+begin
+	-- создать отчет
+	select name,description, all_measures, true_measures, all_measures - true_measures as false_measure
+	from (
+	SELECT t3.name,t4.description,(count(*) ) as all_measures,sum(public.verify_without_bool(t2.temperature,t2.pressure,t2.wind_direction)::integer) as true_measures
+		FROM public.measurment_baths as t1 inner join public.measurment_input_params as t2
+		on t1.measurment_input_param_id=t2.id
+		inner join public.employees as t3 on t3.id=t1.emploee_id
+		inner join public.military_ranks as t4 on t3.military_rank_id=t4.id
+		group by t3.name,description
+		) as t1 order by false_measure
+
 end$$;
 
 
