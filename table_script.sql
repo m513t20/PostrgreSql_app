@@ -649,7 +649,7 @@ end$$;
 do $$
 begin
 	-- создать отчет
-	select name,description, all_measures, true_measures, all_measures - true_measures as false_measure
+	select name,description, all_measures, all_measures - true_measures as false_measure
 	from (
 	SELECT t3.name,t4.description,(count(*) ) as all_measures,sum(public.verify_without_bool(t2.temperature,t2.pressure,t2.wind_direction)::integer) as true_measures
 		FROM public.measurment_baths as t1 inner join public.measurment_input_params as t2
