@@ -43,6 +43,9 @@ begin
 
 	-- Типы данных
 	DROP TYPE IF EXISTS public.input_parameters CASCADE;
+
+
+	DROP PROCEDURE public.sp_get_temperature_air(numeric, numeric[]);
 end;
 
 raise notice 'Удаление старых данных выполнено успешно';
@@ -213,23 +216,23 @@ values (2400,1,False,array[-1,-2,-2,-3,-4,-4,-5,-5,-6,-7,-15,-23,-31,-38]);
 
 -- 3000
 insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (400,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
+values (3000,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
 insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (400,1,False,array[-1,-2,-2,-3,-4,-4,-4,-5,-5,-6,-15,-22,-30,-37]);
+values (3000,1,False,array[-1,-2,-2,-3,-4,-4,-4,-5,-5,-6,-15,-22,-30,-37]);
 
 -- 4000
 insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (400,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
+values (4000,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
 insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (400,1,False,array[-1,-2,-2,-3,-4,-4,-4,-4,-5,-6,-14,-20,-27,-34]);
+values (4000,1,False,array[-1,-2,-2,-3,-4,-4,-4,-4,-5,-6,-14,-20,-27,-34]);
 
 
 -- шапка таблицы (по ней выбираем индекс значения и считаем интерполяцию)
 CREATE TABLE IF NOT EXISTS public.calc_air_table_correction
 (
     temperature integer primary key NOT NULL,
-    index integer NOT NULL,
-)
+    index integer NOT NULL
+);
 
 insert into public.calc_air_table_correction (temperature,index) 
 values (1,1);
@@ -516,6 +519,63 @@ begin
 		return query select substring(to_char(date, 'DDHHMI'), 1, 5)::character(5), lpad(round(inp.height)::text, 4, '0')::character(4), lpad(public.get_delta_pressure(inp.pressure)::text, 3, '0') || lpad(public.get_temperature_interpolation(inp.temperature)::text, 2, '0');
 	end;
 	$BODY$;
+
+
+
+
+
+
+
+	-- операции
+
+	-- табличный расчет температуры
+	CREATE OR REPLACE PROCEDURE public.sp_get_temperature_air(
+		IN inp_temp numeric,
+		INOUT ret numeric[] default array[]::numeric[]) 
+	LANGUAGE 'plpgsql'
+	AS $BODY$
+	declare 
+		abs_temp numeric;
+		tmp_temp numeric;
+		border_1 numeric;
+		border_2 numeric;
+		line integer[];
+		cur_height integer;
+		heights integer[];
+	begin
+		inp_temp:=floor(inp_temp);
+		abs_temp:=abs(inp_temp);
+		if abs_temp>10 then
+		begin
+			select index,temperature from public.calc_air_table_correction as t1 where t1.temperature<abs_temp order by t1.temperature desc limit 1 into border_1,tmp_temp;
+			select index from public.calc_air_table_correction as t1 where t1.temperature=abs_temp-tmp_temp limit 1 into border_2;
+		end;
+		else
+			select index from public.calc_air_table_correction as t1 where t1.temperature=abs_temp order by t1.temperature desc limit 1 into border_1;
+		end if;
+
+		-- берем высоты
+		select array_agg(h_arr) from (select distinct height as h_arr from public.calc_temperature_air order by height) into heights;
+
+		raise notice '%',heights;
+		foreach cur_height in array heights loop
+		begin
+			select data from public.calc_temperature_air where public.calc_temperature_air.height = cur_height and public.calc_temperature_air.is_positive=(inp_temp>0) into line;
+			if abs_temp>10 then
+				ret:=ret|| (line[border_1-1]+line[border_2-1]);
+			else
+				ret:=ret|| (line[border_1]);
+			end if;
+
+		end;
+		end loop;
+		raise notice '%',ret;
+
+	end;
+	$BODY$;
+	ALTER PROCEDURE public.sp_get_temperature_air(numeric, numeric[])
+		OWNER TO admin;
+
 end;
 
 
@@ -586,7 +646,7 @@ begin
 end$$;
 
 
-do$$
+do $$
 begin
 	-- создать отчет
 	select name,description, all_measures, true_measures, all_measures - true_measures as false_measure
