@@ -28,6 +28,7 @@ begin
 	drop table if exists public.employees;
 	drop table if exists public.measurment_types;
 	drop table if exists public.military_ranks;
+	drop table if exists public.calc_temperature_air;
 	-- Константы
 	drop table if exists public.measure_settings;
 
@@ -37,6 +38,7 @@ begin
 	drop sequence if exists public.employees_seq;
 	drop sequence if exists public.military_ranks_seq;
 	drop sequence if exists public.measurment_types_seq;
+	drop sequence if exists public.calc_temperature_air_seq;
 
 	-- Типы данных
 	DROP TYPE IF EXISTS public.input_parameters CASCADE;
@@ -117,6 +119,7 @@ create sequence measurment_input_params_seq start 2;
 alter table measurment_input_params alter column id set default nextval('public.measurment_input_params_seq');
 
 -- Таблица с историей
+create sequence public.calc_temperature_air_seq;
 create table measurment_baths
 (
 		id integer primary key not null,
@@ -155,6 +158,69 @@ insert into public.measure_settings(setting_name,setting_value) values ('wind_sp
 insert into public.measure_settings(setting_name,setting_value) values ('bullet_demolition_min','0');
 insert into public.measure_settings(setting_name,setting_value) values ('bullet_demolition_max','150');
 
+-- Таблица для расчета поправки температуры
+CREATE TABLE public.calc_temperature_air 
+(
+	id integer not null default nextval('public.calc_temperature_air_seq'),
+	measurment_types_id integer not null,
+	height integer not null,
+	is_positive boolean not null,
+	data integer[] not null
+);
+
+-- 200
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (200,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (200,1,False,array[-1,-2,-3,-4,-5,-6,-7,-8,-9,-20,-29,-39,-49]);
+
+-- 400
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (400,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (400,1,False,array[-1,-2,-3,-4,-5,-6,-6,-7,-8,-9,-19,-20,-38,-48]);
+
+-- 800
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (800,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (800,1,False,array[-1,-2,-3,-4,-5,-6,-6,-7,-7,-8,-18,-28,-37,-46]);
+
+-- 1200
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (1200,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (1200,1,False,array[-1,-2,-3,-4,-4,-5,-5,-6,-7,-8,-17,-26,-35,-44]);
+
+-- 1600
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (1600,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (1600,1,False,array[-1,-2,-3,-3,-4,-4,-5,-6,-7,-7,-17,-25,-34,-42]);
+
+-- 2000
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (2000,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (2000,1,False,array[-1,-2,-3,-3,-4,-4,-5,-6,-6,-7,-16,-24,-32,-40]);
+
+-- 2400
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (2400,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (2400,1,False,array[-1,-2,-2,-3,-4,-4,-5,-5,-6,-7,-15,-23,-31,-38]);
+
+-- 3000
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (400,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (400,1,False,array[-1,-2,-2,-3,-4,-4,-4,-5,-5,-6,-15,-22,-30,-37]);
+
+-- 4000
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (400,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (400,1,False,array[-1,-2,-2,-3,-4,-4,-4,-4,-5,-6,-14,-20,-27,-34]);
 
 
 raise notice 'Создание общих констант для рассчетов выполнено успешно';
