@@ -1,12 +1,5 @@
 do $$
 begin
-/*
-Скрипт создания информационной базы данных
-Согласно технического задания https://git.hostfl.ru/VolovikovAlex/Study2025
-Редакция 2025-02-12
-Edit by valex
-*/
-
 
 /*
  1. Удаляем старые элементы
@@ -35,6 +28,8 @@ begin
 	drop table if exists public.employees;
 	drop table if exists public.measurment_types;
 	drop table if exists public.military_ranks;
+	drop table if exists public.calc_temperature_air;
+	drop table if exists public.calc_air_table_correction;
 	-- Константы
 	drop table if exists public.measure_settings;
 
@@ -44,9 +39,13 @@ begin
 	drop sequence if exists public.employees_seq;
 	drop sequence if exists public.military_ranks_seq;
 	drop sequence if exists public.measurment_types_seq;
+	drop sequence if exists public.calc_temperature_air_seq;
 
 	-- Типы данных
 	DROP TYPE IF EXISTS public.input_parameters CASCADE;
+
+
+	DROP PROCEDURE public.sp_get_temperature_air(numeric, numeric[]);
 end;
 
 raise notice 'Удаление старых данных выполнено успешно';
@@ -112,7 +111,8 @@ create table measurment_input_params
 	temperature numeric(8,2) default 0,
 	pressure numeric(8,2) default 0,
 	wind_direction numeric(8,2) default 0,
-	wind_speed numeric(8,2) default 0
+	wind_speed numeric(8,2) default null,
+	bullet_demolition_range numeric(8,2) default null
 );
 
 insert into measurment_input_params(id, measurment_type_id, height, temperature, pressure, wind_direction,wind_speed )
@@ -123,6 +123,7 @@ create sequence measurment_input_params_seq start 2;
 alter table measurment_input_params alter column id set default nextval('public.measurment_input_params_seq');
 
 -- Таблица с историей
+create sequence public.calc_temperature_air_seq;
 create table measurment_baths
 (
 		id integer primary key not null,
@@ -156,8 +157,111 @@ insert into public.measure_settings(setting_name,setting_value) values ('pressur
 insert into public.measure_settings(setting_name,setting_value) values ('pressure_max','900');
 insert into public.measure_settings(setting_name,setting_value) values ('wind_direction_min','0');
 insert into public.measure_settings(setting_name,setting_value) values ('wind_direction_max','59');
+insert into public.measure_settings(setting_name,setting_value) values ('wind_speed_min','0');
+insert into public.measure_settings(setting_name,setting_value) values ('wind_speed_max','15');
+insert into public.measure_settings(setting_name,setting_value) values ('bullet_demolition_min','0');
+insert into public.measure_settings(setting_name,setting_value) values ('bullet_demolition_max','150');
+
+-- Таблица для расчета поправки температуры
+CREATE TABLE public.calc_temperature_air 
+(
+	id integer primary key not null default nextval('public.calc_temperature_air_seq'),
+	measurment_types_id integer not null,
+	height integer not null,
+	is_positive boolean not null,
+	data integer[] not null
+);
+
+-- 200
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (200,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (200,1,False,array[-1,-2,-3,-4,-5,-6,-7,-8,-9,-20,-29,-39,-49]);
+
+-- 400
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (400,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (400,1,False,array[-1,-2,-3,-4,-5,-6,-6,-7,-8,-9,-19,-20,-38,-48]);
+
+-- 800
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (800,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (800,1,False,array[-1,-2,-3,-4,-5,-6,-6,-7,-7,-8,-18,-28,-37,-46]);
+
+-- 1200
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (1200,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (1200,1,False,array[-1,-2,-3,-4,-4,-5,-5,-6,-7,-8,-17,-26,-35,-44]);
+
+-- 1600
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (1600,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (1600,1,False,array[-1,-2,-3,-3,-4,-4,-5,-6,-7,-7,-17,-25,-34,-42]);
+
+-- 2000
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (2000,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (2000,1,False,array[-1,-2,-3,-3,-4,-4,-5,-6,-6,-7,-16,-24,-32,-40]);
+
+-- 2400
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (2400,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (2400,1,False,array[-1,-2,-2,-3,-4,-4,-5,-5,-6,-7,-15,-23,-31,-38]);
+
+-- 3000
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (3000,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (3000,1,False,array[-1,-2,-2,-3,-4,-4,-4,-5,-5,-6,-15,-22,-30,-37]);
+
+-- 4000
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (4000,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
+insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
+values (4000,1,False,array[-1,-2,-2,-3,-4,-4,-4,-4,-5,-6,-14,-20,-27,-34]);
 
 
+-- шапка таблицы (по ней выбираем индекс значения и считаем интерполяцию)
+CREATE TABLE IF NOT EXISTS public.calc_air_table_correction
+(
+    temperature integer primary key NOT NULL,
+    index integer NOT NULL
+);
+
+insert into public.calc_air_table_correction (temperature,index) 
+values (1,1);
+insert into public.calc_air_table_correction (temperature,index) 
+values (2,2);
+insert into public.calc_air_table_correction (temperature,index) 
+values (3,3);
+insert into public.calc_air_table_correction (temperature,index) 
+values (4,4);
+insert into public.calc_air_table_correction (temperature,index) 
+values (5,5);
+insert into public.calc_air_table_correction (temperature,index) 
+values (6,6);
+insert into public.calc_air_table_correction (temperature,index) 
+values (7,7);
+insert into public.calc_air_table_correction (temperature,index) 
+values (8,8);
+insert into public.calc_air_table_correction (temperature,index) 
+values (9,9);
+insert into public.calc_air_table_correction (temperature,index) 
+values (10,10);
+insert into public.calc_air_table_correction (temperature,index) 
+values (20,11);
+insert into public.calc_air_table_correction (temperature,index) 
+values (30,12);
+insert into public.calc_air_table_correction (temperature,index) 
+values (40,13);
+insert into public.calc_air_table_correction (temperature,index) 
+values (50,14);
 
 raise notice 'Создание общих констант для рассчетов выполнено успешно';
 
@@ -253,6 +357,9 @@ begin
 		ret numeric;
 	begin
 	select setting_value from public.measure_settings where setting_name = input_setting_name limit 1 into ret;
+	if ret is null then
+		raise exception 'name % was not found',input_setting_name;
+	end if;
 	return ret;
 
 	end;
@@ -277,6 +384,34 @@ begin
 	$BODY$;
 
 
+	-- проверить конкретный параметр
+	CREATE OR REPLACE FUNCTION public.verify_param(
+		parameter numeric(8,2),
+		parameter_name character varying(100),
+		lower_border numeric(8,2),
+		upper_border numeric(8,2)
+		)
+		RETURNS boolean
+		LANGUAGE 'plpgsql'
+		COST 100
+		VOLATILE PARALLEL UNSAFE
+	AS $BODY$
+	declare 
+		ret boolean;
+	begin
+		if parameter is null then
+			raise exception 'parameter % is null',parameter_name;
+		end if;
+		ret:=parameter>=lower_border AND parameter<=upper_border;
+		if NOT ret then
+			raise exception 'parameter % was written wrong',parameter_name;
+		end if;
+		return ret;
+	end;
+	$BODY$;
+
+
+
 	-- проверить данные
 	CREATE OR REPLACE FUNCTION public.verify(
 		temperature numeric(8,2),
@@ -288,10 +423,26 @@ begin
 		VOLATILE PARALLEL UNSAFE
 	AS $BODY$
 	begin
-		return public.get_setting_num('temperature_max')>temperature AND public.get_setting_num('temperature_min')<temperature AND public.get_setting_num('pressure_max')>pressure AND public.get_setting_num('pressure_min')<pressure AND public.get_setting_num('wind_direction_max')>wind_direction AND public.get_setting_num('wind_direction_min')<wind_direction;
+		return public.verify_param(temperature,'temperature',public.get_setting_num('temperature_min'),public.get_setting_num('temperature_max')) AND  public.verify_param(pressure,'pressure',public.get_setting_num('pressure_min'),public.get_setting_num('pressure_max')) AND  public.verify_param(temperature,'wind_direction',public.get_setting_num('wind_direction_min'),public.get_setting_num('wind_direction_max'));
 	end;
 	$BODY$;
 
+	-- проверить данные без исключений
+	CREATE OR REPLACE FUNCTION public.verify_without_bool(
+		temperature numeric(8,2),
+		pressure numeric(8,2),
+		wind_direction numeric(8,2))
+		RETURNS boolean
+		LANGUAGE 'plpgsql'
+		COST 100
+		VOLATILE PARALLEL UNSAFE
+	AS $BODY$
+	begin
+		return public.verify_param(temperature,'temperature',public.get_setting_num('temperature_min'),public.get_setting_num('temperature_max')) AND  public.verify_param(pressure,'pressure',public.get_setting_num('pressure_min'),public.get_setting_num('pressure_max')) AND  public.verify_param(temperature,'wind_direction',public.get_setting_num('wind_direction_min'),public.get_setting_num('wind_direction_max'));
+		exception when others then
+		return 0;
+	end;
+	$BODY$;
 
 
 	-- получить тип из параметров
@@ -374,6 +525,71 @@ begin
 		return query select substring(to_char(date, 'DDHHMI'), 1, 5)::character(5), lpad(round(inp.height)::text, 4, '0')::character(4), lpad(public.get_delta_pressure(inp.pressure)::text, 3, '0') || lpad(public.get_temperature_interpolation(inp.temperature)::text, 2, '0');
 	end;
 	$BODY$;
+
+
+
+
+
+
+
+	-- операции
+
+	-- табличный расчет температуры
+	CREATE OR REPLACE PROCEDURE public.sp_get_temperature_air(
+		IN inp_temp numeric,
+		INOUT ret numeric[] default array[]::numeric[]) 
+	LANGUAGE 'plpgsql'
+	AS $BODY$
+	declare 
+		abs_temp numeric;
+		diff_temp numeric;
+		border_initial numeric;
+		border_addit numeric;
+		line integer[];
+		cur_height integer;
+		heights integer[];
+	begin
+		inp_temp:=floor(inp_temp);
+		abs_temp:=abs(inp_temp);
+		if abs_temp>10 then
+		begin
+			select index,temperature from public.calc_air_table_correction as t1 where t1.temperature<abs_temp order by t1.temperature desc limit 1 into border_initial,diff_temp;
+			select index from public.calc_air_table_correction as t1 where t1.temperature=abs_temp-diff_temp limit 1 into border_addit;
+		end;
+		else
+			select index from public.calc_air_table_correction as t1 where t1.temperature=abs_temp order by t1.temperature desc limit 1 into border_initial;
+		end if;
+
+
+		-- проверки
+		if border_initial is null or diff_temp is null then
+			raise exception 'parameters for temperature % are not found',abs_temp;
+		end if;
+
+
+
+		-- берем высоты
+		select array_agg(h_arr) from (select distinct height as h_arr from public.calc_temperature_air order by height) into heights;
+
+		raise notice '%',heights;
+		foreach cur_height in array heights loop
+		begin
+			select data from public.calc_temperature_air where public.calc_temperature_air.height = cur_height and public.calc_temperature_air.is_positive=(inp_temp>0) into line;
+			if abs_temp>10 then
+				ret:=ret|| (line[border_initial-1]+line[border_addit-1]);
+			else
+				ret:=ret|| (line[border_initial]);
+			end if;
+
+		end;
+		end loop;
+		raise notice '%',ret;
+
+	end;
+	$BODY$;
+	ALTER PROCEDURE public.sp_get_temperature_air(numeric, numeric[])
+		OWNER TO admin;
+
 end;
 
 
@@ -398,9 +614,10 @@ declare
 	temp_param numeric(8,2);
 	pressure_param numeric(8,2);
 	wind_param numeric(8,2);
-	wind_speed_param numeric (8,2);
+	dependent_param numeric (8,2);
 	emploeeid  numeric;
 	u_id integer;
+	device boolean;
 begin
 
 
@@ -415,21 +632,56 @@ begin
 		temp_param:=floor(random()*(58+58)-58);
 		pressure_param:=floor(random()*(900-500)+500);
 		wind_param:=floor(random()*(59-0)+0);
-		wind_speed_param:=floor(random()*(15-0)+0);
+		
 		emploeeid :=floor(random()*(4-1)+1);
+		device:=random()>0.5;
 
-		insert into public.measurment_input_params(measurment_type_id,height,temperature,pressure,wind_direction,wind_speed) values(1,height_param,temp_param,pressure_param,wind_param,wind_speed_param);
-		select id,height,temperature,pressure,wind_direction,wind_speed from public.measurment_input_params limit 1 offset var_index into u_id,height_param,temp_param,pressure_param,wind_param,wind_speed_param;
+		if device then
+			begin 
+				dependent_param:=floor(random()*(15-0)+0);
+				insert into public.measurment_input_params(measurment_type_id,height,temperature,pressure,wind_direction,wind_speed) values(1,height_param,temp_param,pressure_param,wind_param,dependent_param);
+			end;
+		else
+			begin
+				dependent_param:=floor(random()*(150-0)+0);
+				insert into public.measurment_input_params(measurment_type_id,height,temperature,pressure,wind_direction,bullet_demolition_range) values(1,height_param,temp_param,pressure_param,wind_param,dependent_param);
+			end;
+		end if;
+		select id,height,temperature,pressure,wind_direction,wind_speed from public.measurment_input_params limit 1 offset var_index into u_id,height_param,temp_param,pressure_param,wind_param,dependent_param;
 
 		insert into public.measurment_baths(emploee_id, measurment_input_param_id, started) values(emploeeid ,u_id,now());
 
 		
-		raise notice 'h: %, temp: %, pres: %, wind_dir: %, wind_speed: %',height_param,temp_param,pressure_param,wind_param,wind_speed_param;
+		raise notice 'h: %, temp: %, pres: %, wind_dir: %, dependent: %',height_param,temp_param,pressure_param,wind_param,dependent_param;
 	end;
 	end loop;
 	-- raise notice 'тестовые данные готовы';
 	
 end$$;
+
+
+do $$
+begin
+	-- создать отчет
+	select name,description, all_measures, all_measures - true_measures as false_measure
+	from (
+	SELECT t3.name,t4.description,(count(*) ) as all_measures,sum(public.verify_without_bool(t2.temperature,t2.pressure,t2.wind_direction)::integer) as true_measures
+		FROM public.measurment_baths as t1 inner join public.measurment_input_params as t2
+		on t1.measurment_input_param_id=t2.id
+		inner join public.employees as t3 on t3.id=t1.emploee_id
+		inner join public.military_ranks as t4 on t3.military_rank_id=t4.id
+		group by t3.name,description
+		) as t1 order by false_measure
+
+end$$;
+
+
+-- TODO : 
+-- 1 переделать verify чтобы она могла говорить какая конкретно переменная передана некорректно - СДЕЛАНО СТРОКА 407
+-- 2 сделать проверку на null при verify - СДЕЛАНО СТРОКА 403
+-- 3 добавить проверок при остуствии константы в таблицах - СДЕЛАНО СТРОКА 361
+-- Доделлать
+
 
 
 
