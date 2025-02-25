@@ -357,6 +357,9 @@ begin
 		ret numeric;
 	begin
 	select setting_value from public.measure_settings where setting_name = input_setting_name limit 1 into ret;
+	if ret is null then
+		raise exception 'name % was not found',input_setting_name;
+	end if;
 	return ret;
 
 	end;
@@ -396,6 +399,9 @@ begin
 	declare 
 		ret boolean;
 	begin
+		if parameter is null then
+			raise exception 'parameter % is null',parameter_name;
+		end if;
 		ret:=parameter>=lower_border AND parameter<=upper_border;
 		if NOT ret then
 			raise exception 'parameter % was written wrong',parameter_name;
@@ -536,9 +542,9 @@ begin
 	AS $BODY$
 	declare 
 		abs_temp numeric;
-		tmp_temp numeric;
-		border_1 numeric;
-		border_2 numeric;
+		diff_temp numeric;
+		border_initial numeric;
+		border_addit numeric;
 		line integer[];
 		cur_height integer;
 		heights integer[];
@@ -547,12 +553,20 @@ begin
 		abs_temp:=abs(inp_temp);
 		if abs_temp>10 then
 		begin
-			select index,temperature from public.calc_air_table_correction as t1 where t1.temperature<abs_temp order by t1.temperature desc limit 1 into border_1,tmp_temp;
-			select index from public.calc_air_table_correction as t1 where t1.temperature=abs_temp-tmp_temp limit 1 into border_2;
+			select index,temperature from public.calc_air_table_correction as t1 where t1.temperature<abs_temp order by t1.temperature desc limit 1 into border_initial,diff_temp;
+			select index from public.calc_air_table_correction as t1 where t1.temperature=abs_temp-diff_temp limit 1 into border_addit;
 		end;
 		else
-			select index from public.calc_air_table_correction as t1 where t1.temperature=abs_temp order by t1.temperature desc limit 1 into border_1;
+			select index from public.calc_air_table_correction as t1 where t1.temperature=abs_temp order by t1.temperature desc limit 1 into border_initial;
 		end if;
+
+
+		-- проверки
+		if border_initial is null or diff_temp is null then
+			raise exception 'parameters for temperature % are not found',abs_temp;
+		end if;
+
+
 
 		-- берем высоты
 		select array_agg(h_arr) from (select distinct height as h_arr from public.calc_temperature_air order by height) into heights;
@@ -562,9 +576,9 @@ begin
 		begin
 			select data from public.calc_temperature_air where public.calc_temperature_air.height = cur_height and public.calc_temperature_air.is_positive=(inp_temp>0) into line;
 			if abs_temp>10 then
-				ret:=ret|| (line[border_1-1]+line[border_2-1]);
+				ret:=ret|| (line[border_initial-1]+line[border_addit-1]);
 			else
-				ret:=ret|| (line[border_1]);
+				ret:=ret|| (line[border_initial]);
 			end if;
 
 		end;
@@ -663,9 +677,9 @@ end$$;
 
 
 -- TODO : 
--- 1 переделать verify чтобы она могла говорить какая конкретно переменная передана некорректно
--- 2 сделать проверку на null при verify
--- 3 добавить проверок при остуствии константы в таблицах
+-- 1 переделать verify чтобы она могла говорить какая конкретно переменная передана некорректно - СДЕЛАНО СТРОКА 407
+-- 2 сделать проверку на null при verify - СДЕЛАНО СТРОКА 403
+-- 3 добавить проверок при остуствии константы в таблицах - СДЕЛАНО СТРОКА 361
 -- Доделлать
 
 
