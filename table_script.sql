@@ -22,14 +22,19 @@ begin
 	alter table if exists public.measurment_baths
 	drop constraint if exists emploee_id_fk;
 
+	alter table if exists public.log_events
+	drop constraint if exists log_type_id_fk;
+
 	-- Таблицы
-	drop table if exists public.measurment_input_params;
+	drop table if exists public.measurment_input_params CASCADE;
 	drop table if exists public.measurment_baths;
 	drop table if exists public.employees;
 	drop table if exists public.measurment_types;
 	drop table if exists public.military_ranks;
 	drop table if exists public.calc_temperature_air;
 	drop table if exists public.calc_air_table_correction;
+	DROP TABLE IF EXISTS public.log_types;
+	DROP TABLE IF EXISTS public.log_events;
 	-- Константы
 	drop table if exists public.measure_settings;
 
@@ -40,6 +45,8 @@ begin
 	drop sequence if exists public.military_ranks_seq;
 	drop sequence if exists public.measurment_types_seq;
 	drop sequence if exists public.calc_temperature_air_seq;
+	drop sequence if exists public.log_types_seq;
+	drop sequence if exists public.log_events_seq;
 
 	-- Типы данных
 	DROP TYPE IF EXISTS public.input_parameters CASCADE;
@@ -75,7 +82,7 @@ create table employees
     id integer primary key not null,
 	name text,
 	birthday timestamp ,
-	military_rank_id integer
+	military_rank_id integer not null
 );
 
 insert into employees(id, name, birthday,military_rank_id )  
@@ -263,6 +270,42 @@ values (40,13);
 insert into public.calc_air_table_correction (temperature,index) 
 values (50,14);
 
+
+
+
+-- Типы логов
+CREATE TABLE IF NOT EXISTS public.log_types
+(
+    id integer NOT NULL,
+    name character varying(100) COLLATE pg_catalog."default",
+    CONSTRAINT log_types_pkey PRIMARY KEY (id)
+);
+
+create sequence log_types_seq start 1;
+
+alter table public.log_types alter column id set default nextval('public.log_types_seq');
+
+insert into public.log_types(name) values('input');
+insert into public.log_types(name) values('error');
+
+-- Логи
+CREATE TABLE IF NOT EXISTS public.log_events
+(
+    id integer NOT NULL,
+    log_type_id integer NOT NULL,
+    event_name character varying(100) COLLATE pg_catalog."default",
+    log json,
+    CONSTRAINT log_events_pkey PRIMARY KEY (id)
+);
+
+create sequence log_events_seq start 1;
+
+
+alter table public.log_events alter column id set default nextval('public.log_types_seq');
+
+
+
+
 raise notice 'Создание общих констант для рассчетов выполнено успешно';
 
 
@@ -319,6 +362,10 @@ begin
 	foreign key(military_rank_id)
 	references public.military_ranks (id);
 
+	alter table public.log_events
+	add constraint log_type_id_fk
+	foreign key(log_type_id)
+	references public.log_types (id);
 end;
 
 raise notice 'Связи сформированы';
@@ -336,7 +383,8 @@ begin
 		temperature numeric(8,2),
 		pressure numeric(8,2),
 		wind_direction numeric(8,2),
-		wind_speed numeric(8,2)
+		wind_speed numeric(8,2),
+		is_counted boolean
 	);
 end;
 
@@ -447,11 +495,11 @@ begin
 
 	-- получить тип из параметров
 	CREATE OR REPLACE FUNCTION public.get_input_params(
-		height numeric(8,2),
-		temperature numeric(8,2),
-		pressure numeric(8,2),
-		wind_direction numeric(8,2),
-		wind_speed numeric(8,2))
+		height_inp numeric(8,2),
+		temperature_inp numeric(8,2),
+		pressure_inp numeric(8,2),
+		wind_direction_inp numeric(8,2),
+		wind_speed_inp numeric(8,2))
 		RETURNS input_parameters
 		LANGUAGE 'plpgsql'
 		COST 100
@@ -459,15 +507,22 @@ begin
 	AS $BODY$
 	declare 
 		res public.input_parameters;
+		counted_id integer;
 	begin
-		if NOT public.verify(temperature,pressure,wind_direction) then
+		if NOT public.verify(temperature_inp,pressure_inp,wind_direction_inp) then
 			raise exception 'Неправельно введены данные';
 		end if;
-		res.height:=height;
-		res.temperature:=temperature;
-		res.pressure:=pressure;
-		res.wind_direction:=wind_direction;
-		res.wind_speed:=wind_speed;
+		res.height:=height_inp;
+		res.temperature:=temperature_inp;
+		res.pressure:=pressure_inp;
+		res.wind_direction:=wind_direction_inp;
+		res.wind_speed:=wind_speed_inp;
+		SELECT id FROM public.measurment_input_params  where height=res.height and temperature=res.temperature 
+		and pressure=res.pressure and wind_direction=res.wind_direction 
+		and wind_speed=res.wind_speed into counted_id;
+
+		res.is_counted:=(counted_id is NOT null);
+
 		return res;
 
 	end;
@@ -652,7 +707,7 @@ begin
 		insert into public.measurment_baths(emploee_id, measurment_input_param_id, started) values(emploeeid ,u_id,now());
 
 		
-		raise notice 'h: %, temp: %, pres: %, wind_dir: %, dependent: %',height_param,temp_param,pressure_param,wind_param,dependent_param;
+		-- raise notice 'h: %, temp: %, pres: %, wind_dir: %, dependent: %',height_param,temp_param,pressure_param,wind_param,dependent_param;
 	end;
 	end loop;
 	-- raise notice 'тестовые данные готовы';
@@ -663,6 +718,7 @@ end$$;
 do $$
 begin
 	-- создать отчет
+	with get_measures_report as (
 	select name,description, all_measures, all_measures - true_measures as false_measure
 	from (
 	SELECT t3.name,t4.description,(count(*) ) as all_measures,sum(public.verify_without_bool(t2.temperature,t2.pressure,t2.wind_direction)::integer) as true_measures
@@ -672,17 +728,15 @@ begin
 		inner join public.military_ranks as t4 on t3.military_rank_id=t4.id
 		group by t3.name,description
 		) as t1 order by false_measure
-
+	)select * from get_measures_report;
 end$$;
 
 
--- TODO : 
--- 1 переделать verify чтобы она могла говорить какая конкретно переменная передана некорректно - СДЕЛАНО СТРОКА 407
--- 2 сделать проверку на null при verify - СДЕЛАНО СТРОКА 403
--- 3 добавить проверок при остуствии константы в таблицах - СДЕЛАНО СТРОКА 361
--- Доделлать
-
-
+-- TODO 28.02.2025:
+-- 1. в отчете вынести вычесляемое поле из order by - (думать)
+-- 2. проверка на отсутствие ранга (поменять inner join на left join или сделать запрет not null в military ranks) - СДЕЛАНО 78 строка
+-- 3. переделать отчет под cte
+-- 4. формата последний в должности|неверные измерения
 
 
 
