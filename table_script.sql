@@ -35,6 +35,8 @@ begin
 	drop table if exists public.calc_air_table_correction;
 	DROP TABLE IF EXISTS public.log_types;
 	DROP TABLE IF EXISTS public.log_events;
+	DROP TABLE IF EXISTS public.calc_wind_correction;
+	drop table if exists public.calc_wind_table_correction;
 	-- Константы
 	drop table if exists public.measure_settings;
 
@@ -269,6 +271,76 @@ insert into public.calc_air_table_correction (temperature,index)
 values (40,13);
 insert into public.calc_air_table_correction (temperature,index) 
 values (50,14);
+
+
+-- таблица расчета ветра 
+CREATE TABLE IF NOT EXISTS public.calc_wind_correction
+(
+    height integer NOT NULL,
+    bullet_demolition integer[],
+	alpha integer,
+    CONSTRAINT calc_wind_correction_pkey PRIMARY KEY (height)
+);
+
+insert into public.calc_wind_correction(height,bullet_demolition,alpha) 
+values(200,array[3,4,5,6,7,7,8,9,10,11,12,12],0);
+
+insert into public.calc_wind_correction(height,bullet_demolition,alpha) 
+values(400,array[4,5,6,7,8,9,10,11,12,13,14,15],1);
+
+insert into public.calc_wind_correction(height,bullet_demolition,alpha) 
+values(800,array[4,5,6,7,8,9,10,11,13,14,15,16],2);
+
+insert into public.calc_wind_correction(height,bullet_demolition,alpha) 
+values(1200,array[4,5,7,8,8,9,11,12,13,15,15,16],2);
+
+insert into public.calc_wind_correction(height,bullet_demolition,alpha) 
+values(1600,array[4,6,7,8,9,10,11,13,14,15,17,17],3);
+
+insert into public.calc_wind_correction(height,bullet_demolition,alpha) 
+values(2000,array[4,6,7,8,9,10,11,13,14,16,17,18],3);
+
+insert into public.calc_wind_correction(height,bullet_demolition,alpha) 
+values(2400,array[4,6,8,9,9,10,12,14,15,16,18,19],3);
+
+insert into public.calc_wind_correction(height,bullet_demolition,alpha) 
+values(3000,array[5,6,8,9,10,11,12,14,15,17,18,19],4);
+
+insert into public.calc_wind_correction(height,bullet_demolition,alpha) 
+values(4000,array[5,6,8,9,10,11,12,14,16,18,19,20],4);
+
+
+-- шапка таблицы
+CREATE TABLE IF NOT EXISTS public.calc_wind_table_correction
+(
+    demolition integer primary key NOT NULL,
+    index integer NOT NULL
+);
+
+insert into public.calc_wind_table_correction (demolition,index) 
+values (40,1);
+insert into public.calc_wind_table_correction (demolition,index) 
+values (50,2);
+insert into public.calc_wind_table_correction (demolition,index) 
+values (60,3);
+insert into public.calc_wind_table_correction (demolition,index) 
+values (70,4);
+insert into public.calc_wind_table_correction (demolition,index) 
+values (80,5);
+insert into public.calc_wind_table_correction (demolition,index) 
+values (90,6);
+insert into public.calc_wind_table_correction (demolition,index) 
+values (100,7);
+insert into public.calc_wind_table_correction (demolition,index) 
+values (110,8);
+insert into public.calc_wind_table_correction (demolition,index) 
+values (120,9);
+insert into public.calc_wind_table_correction (demolition,index) 
+values (130,10);
+insert into public.calc_wind_table_correction (demolition,index) 
+values (140,11);
+insert into public.calc_wind_table_correction (demolition,index) 
+values (150,12);
 
 
 
