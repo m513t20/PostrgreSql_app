@@ -277,7 +277,7 @@ values (50,14);
 CREATE TABLE IF NOT EXISTS public.calc_wind_correction
 (
     height integer NOT NULL,
-    bullet_demolition integer[],
+    bullet_demolition numeric[],
 	alpha integer,
     CONSTRAINT calc_wind_correction_pkey PRIMARY KEY (height)
 );
@@ -559,8 +559,10 @@ begin
 	AS $BODY$
 	begin
 		return public.verify_param(temperature,'temperature',public.get_setting_num('temperature_min'),public.get_setting_num('temperature_max')) AND  public.verify_param(pressure,'pressure',public.get_setting_num('pressure_min'),public.get_setting_num('pressure_max')) AND  public.verify_param(temperature,'wind_direction',public.get_setting_num('wind_direction_min'),public.get_setting_num('wind_direction_max'));
-		exception when others then
+		exception when others then begin
+		-- {user,error_type,error_code}
 		return 0;
+		end;
 	end;
 	$BODY$;
 
@@ -718,8 +720,54 @@ begin
 
 	end;
 	$BODY$;
-	ALTER PROCEDURE public.sp_get_temperature_air(numeric, numeric[])
-		OWNER TO admin;
+
+
+	-- табличный расчет ветра
+	CREATE OR REPLACE PROCEDURE public.sp_get_wind_correction(
+		IN dem_range integer,
+		IN wind_alph integer)
+	LANGUAGE 'plpgsql'
+	AS $BODY$
+	declare
+			cur_height integer;
+			speed numeric(8,2);
+			heights integer[];
+			line numeric[];
+			line_index integer;
+			line_alpha integer;
+	begin
+		-- берем индекс для массива
+		select index from public.calc_wind_table_correction 
+		where dem_range>demolition order by demolition desc limit 1 into line_index;
+
+		-- берем высоты
+		select array_agg(h_arr) from 
+			(select distinct height as h_arr 
+			from  public.calc_wind_correction
+			order by height) into heights;
+		if line_index=12 then
+				raise exception 'demolition range is out of range';
+		end if;
+
+
+		foreach cur_height in array heights loop
+		begin
+			select bullet_demolition,alpha from public.calc_wind_correction
+			where height=cur_height into line,line_alpha;
+			if line_index is null then 
+				raise notice 'speed=%; alpha=%',0,alpha;
+			else
+				begin
+					speed:=line[line_index]+(line[line_index+1]-line[line_index])*0.1;
+					raise notice 'speed=%; alpha=%',speed,line_alpha;
+				end;
+			end if;
+		end;
+		end loop;
+	end;
+	$BODY$;
+
+
 
 
 	-- логирование
@@ -752,6 +800,17 @@ begin
 	end;
 	$BODY$;
 
+	-- error 
+	CREATE OR REPLACE PROCEDURE public.sp_make_log_inp(
+		IN log_data json)
+	LANGUAGE 'plpgsql'
+	AS $BODY$
+	begin
+	call sp_make_log(2,log_data);
+	end;
+	$BODY$;
+
+	
 
 end;
 
@@ -818,27 +877,90 @@ begin
 		-- raise notice 'h: %, temp: %, pres: %, wind_dir: %, dependent: %',height_param,temp_param,pressure_param,wind_param,dependent_param;
 	end;
 	end loop;
-	-- raise notice 'тестовые данные готовы';
+	raise notice 'тестовые данные готовы';
 	
 end$$;
 
 
+
+
+
+
+
+
+-- Отчеты
 do $$
 begin
-	-- создать отчет
-	with get_measures_report as (
-	select name,description, all_measures, all_measures - true_measures as false_measure
-	from (
-	SELECT t3.name,t4.description,(count(*) ) as all_measures,sum(public.verify_without_bool(t2.temperature,t2.pressure,t2.wind_direction)::integer) as true_measures
-		FROM public.measurment_baths as t1 inner join public.measurment_input_params as t2
-		on t1.measurment_input_param_id=t2.id
-		inner join public.employees as t3 on t3.id=t1.emploee_id
-		inner join public.military_ranks as t4 on t3.military_rank_id=t4.id
-		group by t3.name,description
-		) as t1 order by false_measure
-	)select * from get_measures_report;
+	-- создать отчет cte
+	CREATE OR REPLACE VIEW public.view_original
+	AS
+	WITH get_measures_report AS (
+			SELECT t1.name,
+				t1.description,
+				t1.all_measures,
+				t1.all_measures - t1.true_measures AS false_measure
+			FROM ( SELECT t3.name,
+						t4.description,
+						count(*) AS all_measures,
+						sum(verify_without_bool(t2.temperature, t2.pressure, t2.wind_direction)::integer) AS true_measures
+					FROM measurment_baths t1_1
+						JOIN measurment_input_params t2 ON t1_1.measurment_input_param_id = t2.id
+						JOIN employees t3 ON t3.id = t1_1.emploee_id
+						JOIN military_ranks t4 ON t3.military_rank_id = t4.id
+					GROUP BY t3.name, t4.description) t1
+			ORDER BY (t1.all_measures - t1.true_measures)
+			)
+	SELECT name,
+		description,
+		all_measures,
+		false_measure
+	FROM get_measures_report;
+
+
+	-- отчет минимум 10 ошибок
+	CREATE OR REPLACE VIEW public.view_best_height
+	AS
+	WITH get_measures_report AS (
+			SELECT t1.name,
+				t1.description,
+				t1.min_h,
+				t1.max_h,
+				t1.all_measures,
+				t1.all_measures - t1.true_measures AS false_measure
+			FROM ( SELECT t3.name,
+						t4.description,
+						min(t2.height) as min_h,
+						max(t2.height) as max_h,
+						count(*) AS all_measures,
+						sum(verify_without_bool(t2.temperature, t2.pressure, t2.wind_direction)::integer) AS true_measures
+					FROM measurment_baths t1_1
+						JOIN measurment_input_params t2 ON t1_1.measurment_input_param_id = t2.id
+						JOIN employees t3 ON t3.id = t1_1.emploee_id
+						JOIN military_ranks t4 ON t3.military_rank_id = t4.id
+					GROUP BY t3.name, t4.description) t1 where t1.all_measures>5 and t1.all_measures-t1.true_measures<10
+			ORDER BY (t1.all_measures - t1.true_measures)
+			)
+	SELECT name,
+		description,
+		min_h,
+		max_h,
+		all_measures,
+		false_measure
+	FROM get_measures_report;
+
 end$$;
 
+
+
+
+
+
+-- демонстрация 
+do $$
+begin
+	-- расчет ветра 
+	call public.sp_get_wind_correction(56,5);
+end $$;
 
 -- TODO 28.02.2025:
 -- 1. в отчете вынести вычесляемое поле из order by - (думать)
