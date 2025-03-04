@@ -291,10 +291,10 @@ insert into public.log_types(name) values('error');
 -- Логи
 CREATE TABLE IF NOT EXISTS public.log_events
 (
-    id integer NOT NULL,
+    id integer NOT NULL DEFAULT nextval('log_types_seq'::regclass),
     log_type_id integer NOT NULL,
-    event_name character varying(100) COLLATE pg_catalog."default",
-    log json,
+    event_log json,
+    event_time timestamp without time zone DEFAULT now(),
     CONSTRAINT log_events_pkey PRIMARY KEY (id)
 );
 
@@ -523,6 +523,10 @@ begin
 
 		res.is_counted:=(counted_id is NOT null);
 
+		if not res.is_counted then 
+			call public.sp_make_log_inp(row_to_json(res));
+		end if;
+
 		return res;
 
 	end;
@@ -644,6 +648,38 @@ begin
 	$BODY$;
 	ALTER PROCEDURE public.sp_get_temperature_air(numeric, numeric[])
 		OWNER TO admin;
+
+
+	-- логирование
+	CREATE OR REPLACE PROCEDURE public.sp_make_log(
+	IN log_type integer,
+	IN log_data json)
+	LANGUAGE 'plpgsql'
+	AS $BODY$
+	declare
+		check_log_type integer;
+	begin
+		select id from public.log_types where id=log_type into check_log_type;
+		if check_log_type is null then
+			raise exception 'no such log type: %',log_type;
+		end if;
+
+		insert into public.log_events(log_type_id,event_log) 
+		values (log_type,log_data);
+	end;
+	$BODY$;
+
+
+	--логирование входа
+	CREATE OR REPLACE PROCEDURE public.sp_make_log_inp(
+		IN log_data json)
+	LANGUAGE 'plpgsql'
+	AS $BODY$
+	begin
+	call sp_make_log(1,log_data);
+	end;
+	$BODY$;
+
 
 end;
 
