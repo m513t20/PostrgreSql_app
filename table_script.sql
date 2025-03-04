@@ -375,6 +375,17 @@ create sequence log_events_seq start 1;
 
 alter table public.log_events alter column id set default nextval('public.log_types_seq');
 
+-- индексы
+
+create index ix_measurment_baths_emploee_id 
+on public.measurment_baths(emploee_id);
+
+create index ix_employees_military_rank_id 
+on public.employees(military_rank_id );
+
+create index ix_log_type_id 
+on public.log_events(log_type_id);
+
 
 
 
