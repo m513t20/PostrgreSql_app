@@ -911,7 +911,7 @@ begin
 	-- создать отчет cte
 	CREATE OR REPLACE VIEW public.view_original
 	AS
-with get_t1 as ( SELECT t3.name,
+	with get_measure_verified as ( SELECT t1_1.emploee_id,t3.name,
 						t4.description,
 						count(*) AS all_measures,
 						sum(verify_without_bool(t2.temperature, t2.pressure, t2.wind_direction)::integer) AS true_measures
@@ -919,53 +919,47 @@ with get_t1 as ( SELECT t3.name,
 						JOIN measurment_input_params t2 ON t1_1.measurment_input_param_id = t2.id
 						JOIN employees t3 ON t3.id = t1_1.emploee_id
 						JOIN military_ranks t4 ON t3.military_rank_id = t4.id
-					GROUP BY t3.name, t4.description),
-			get_measures_report AS (
-					SELECT t1.name,
-						t1.description,
-						t1.all_measures,
-						t1.all_measures - t1.true_measures AS false_measure
-					from get_t1 as t1
-					ORDER BY (t1.all_measures - t1.true_measures)
-					)
-	SELECT name,
+					GROUP BY t3.name, t4.description, t1_1.emploee_id
+	)
+	SELECT emploee_id,
+		name,
 		description,
 		all_measures,
-		false_measure
-	FROM get_measures_report;
+		all_measures-true_measures as false_measure
+	FROM get_measure_verified order by all_measures-true_measures desc;
+
+
+
 
 	-- отчет минимум 10 ошибок
 	CREATE OR REPLACE VIEW public.view_best_height
 	AS
-	with get_t1 as ( SELECT t3.name,
+	with get_measure_verified as ( SELECT t1_1.emploee_id,t3.name,
 						t4.description,
-						min(t2.height) as min_h,
-						max(t2.height) as max_h,
 						count(*) AS all_measures,
 						sum(verify_without_bool(t2.temperature, t2.pressure, t2.wind_direction)::integer) AS true_measures
 					FROM measurment_baths t1_1
 						JOIN measurment_input_params t2 ON t1_1.measurment_input_param_id = t2.id
 						JOIN employees t3 ON t3.id = t1_1.emploee_id
 						JOIN military_ranks t4 ON t3.military_rank_id = t4.id
-					GROUP BY t3.name, t4.description),  
-	get_measures_report AS (
+					GROUP BY t3.name, t4.description, t1_1.emploee_id
+	),
+	get_height as (select t2.emploee_id,min(t1.height) as min_h,max(t1.height) as max_h
+		from measurment_input_params t1 inner join
+		measurment_baths t2 on t2.measurment_input_param_id=t1.id 
+		group by t2.emploee_id
+	)
+	SELECT 
+		t1.name,
+		t1.description,
+		t2.min_h,
+		t2.max_h,
+		t1.all_measures,
+		t1.all_measures-t1.true_measures as false_measure
+	FROM get_measure_verified t1 inner join
+	get_height t2 on t2.emploee_id=t1.emploee_id
+	where t1.all_measures>5 and t1.all_measures-t1.true_measures<10;
 
-			SELECT t1.name,
-				t1.description,
-				t1.min_h,
-				t1.max_h,
-				t1.all_measures,
-				t1.all_measures - t1.true_measures AS false_measure from get_t1 as t1 where t1.all_measures>5 and t1.all_measures-t1.true_measures<10
-			ORDER BY (t1.all_measures - t1.true_measures)
-			)
-			
-	SELECT name,
-		description,
-		min_h,
-		max_h,
-		all_measures,
-		false_measure
-	FROM get_measures_report;
 
 end$$;
 
