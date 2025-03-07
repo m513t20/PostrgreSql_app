@@ -29,7 +29,7 @@ begin
 	drop table if exists public.measurment_input_params CASCADE;
 	drop table if exists public.measurment_baths;
 	drop table if exists public.employees;
-	drop table if exists public.measurment_types;
+	drop table if exists public.measurment_types cascade;
 	drop table if exists public.military_ranks;
 	drop table if exists public.calc_temperature_air;
 	drop table if exists public.calc_air_table_correction;
@@ -602,9 +602,7 @@ begin
 		res.pressure:=pressure_inp;
 		res.wind_direction:=wind_direction_inp;
 		res.wind_speed:=wind_speed_inp;
-		SELECT id FROM public.measurment_input_params  where height=res.height and temperature=res.temperature 
-		and pressure=res.pressure and wind_direction=res.wind_direction 
-		and wind_speed=res.wind_speed into counted_id;
+		select id from public.measurment_input_params order by id desc limit 1 into counted_id;
 
 		res.is_counted:=(counted_id is NOT null);
 
@@ -737,7 +735,8 @@ begin
 	CREATE OR REPLACE PROCEDURE public.sp_get_wind_correction(
 		IN dem_range integer,
 		IN wind_alph integer,
-		INOUT ret numeric[][] default array[]::numeric[][])
+		INOUT ret_speed numeric[] default array[]::numeric[],
+		INOUT ret_alph  numeric[] default array[]::numeric[])
 	LANGUAGE 'plpgsql'
 	AS $BODY$
 	declare
@@ -769,13 +768,15 @@ begin
 			if line_index is null then 
 			begin
 				raise notice 'speed=%; alpha=%',0,alpha;
-				ret:=ret|| (array_agg(0,alpha::numeric));
+				ret_speed:=ret_speed|| 0;
+				ret_alph:=ret_alph||alpha;
 			end;
 			else
 				begin
 					speed:=line[line_index]+(line[line_index+1]-line[line_index])*0.1;
 					raise notice 'speed=%; alpha=%',speed,line_alpha;
-					ret:=ret|| (array_agg(speed::numeric,line_alpha::numeric));
+					ret_speed:=ret_speed|| speed::numeric;
+					ret_alph:=ret_alph||line_alpha::numeric;
 				end;
 			end if;
 		end;
@@ -975,9 +976,12 @@ end$$;
 
 -- демонстрация 
 do $$
+declare 
+	a numeric[];
+	b numeric[];
 begin
 	-- расчет ветра 
-	call public.sp_get_wind_correction(56,5);
+	call public.sp_get_wind_correction(56,5,a,b);
 end $$;
 
 -- TODO 28.02.2025:
