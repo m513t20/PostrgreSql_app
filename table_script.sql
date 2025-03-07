@@ -736,7 +736,8 @@ begin
 	-- табличный расчет ветра
 	CREATE OR REPLACE PROCEDURE public.sp_get_wind_correction(
 		IN dem_range integer,
-		IN wind_alph integer)
+		IN wind_alph integer,
+		INOUT ret numeric[][] default array[]::numeric[][])
 	LANGUAGE 'plpgsql'
 	AS $BODY$
 	declare
@@ -766,11 +767,15 @@ begin
 			select bullet_demolition,alpha from public.calc_wind_correction
 			where height=cur_height into line,line_alpha;
 			if line_index is null then 
+			begin
 				raise notice 'speed=%; alpha=%',0,alpha;
+				ret:=ret|| (array_agg(0,alpha::numeric));
+			end;
 			else
 				begin
 					speed:=line[line_index]+(line[line_index+1]-line[line_index])*0.1;
 					raise notice 'speed=%; alpha=%',speed,line_alpha;
+					ret:=ret|| (array_agg(speed::numeric,line_alpha::numeric));
 				end;
 			end if;
 		end;
@@ -905,12 +910,7 @@ begin
 	-- создать отчет cte
 	CREATE OR REPLACE VIEW public.view_original
 	AS
-	WITH get_measures_report AS (
-			SELECT t1.name,
-				t1.description,
-				t1.all_measures,
-				t1.all_measures - t1.true_measures AS false_measure
-			FROM ( SELECT t3.name,
+with get_t1 as ( SELECT t3.name,
 						t4.description,
 						count(*) AS all_measures,
 						sum(verify_without_bool(t2.temperature, t2.pressure, t2.wind_direction)::integer) AS true_measures
@@ -918,27 +918,25 @@ begin
 						JOIN measurment_input_params t2 ON t1_1.measurment_input_param_id = t2.id
 						JOIN employees t3 ON t3.id = t1_1.emploee_id
 						JOIN military_ranks t4 ON t3.military_rank_id = t4.id
-					GROUP BY t3.name, t4.description) t1
-			ORDER BY (t1.all_measures - t1.true_measures)
-			)
+					GROUP BY t3.name, t4.description),
+			get_measures_report AS (
+					SELECT t1.name,
+						t1.description,
+						t1.all_measures,
+						t1.all_measures - t1.true_measures AS false_measure
+					from get_t1 as t1
+					ORDER BY (t1.all_measures - t1.true_measures)
+					)
 	SELECT name,
 		description,
 		all_measures,
 		false_measure
 	FROM get_measures_report;
 
-
 	-- отчет минимум 10 ошибок
 	CREATE OR REPLACE VIEW public.view_best_height
 	AS
-	WITH get_measures_report AS (
-			SELECT t1.name,
-				t1.description,
-				t1.min_h,
-				t1.max_h,
-				t1.all_measures,
-				t1.all_measures - t1.true_measures AS false_measure
-			FROM ( SELECT t3.name,
+	with get_t1 as ( SELECT t3.name,
 						t4.description,
 						min(t2.height) as min_h,
 						max(t2.height) as max_h,
@@ -948,9 +946,18 @@ begin
 						JOIN measurment_input_params t2 ON t1_1.measurment_input_param_id = t2.id
 						JOIN employees t3 ON t3.id = t1_1.emploee_id
 						JOIN military_ranks t4 ON t3.military_rank_id = t4.id
-					GROUP BY t3.name, t4.description) t1 where t1.all_measures>5 and t1.all_measures-t1.true_measures<10
+					GROUP BY t3.name, t4.description),  
+	get_measures_report AS (
+
+			SELECT t1.name,
+				t1.description,
+				t1.min_h,
+				t1.max_h,
+				t1.all_measures,
+				t1.all_measures - t1.true_measures AS false_measure from get_t1 as t1 where t1.all_measures>5 and t1.all_measures-t1.true_measures<10
 			ORDER BY (t1.all_measures - t1.true_measures)
 			)
+			
 	SELECT name,
 		description,
 		min_h,
