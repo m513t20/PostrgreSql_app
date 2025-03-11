@@ -600,7 +600,6 @@ begin
 		table_line_neg integer[];
 		heights integer[];
 		cur_height integer;
-		head_index integer;
 		upper_index integer;
 		lower_index integer;
 		abs_temp integer;
@@ -711,32 +710,51 @@ begin
 	LANGUAGE 'plpgsql'
 	AS $BODY$
 	declare
-			cur_height integer;
-			speed numeric(8,2);
-			heights integer[];
-			line numeric[];
-			line_index integer;
-			line_alpha integer;
+		table_header integer[];
+		table_line integer[];
+		heights integer[];
+		alpha integer;
+		cur_height integer;
+		upper_index integer;
+		lower_index integer;
+		speed numeric;
+		tmp numeric;
+		tmp_index integer;
+		arr_l integer;
 	begin
-		-- берем индекс для массива
-		select index from public.calc_wind_table_correction 
-		where dem_range>demolition order by demolition desc limit 1 into line_index;
+		select header_values from public.table_header where table_type=2 and 
+		measure_type=2 into table_header;
 
-		-- берем высоты
-		select array_agg(h_arr) from 
-			(select distinct height as h_arr 
-			from  public.calc_wind_correction
-			order by height) into heights;
-		if line_index=12 then
-				raise exception 'demolition range is out of range';
+		if table_header is null then 
+			raise exception 'table header not found';
 		end if;
 
+		arr_l:=array_length(table_header,1)-1 ;
+		for tmp_index in 0..arr_l loop
+			begin
+				if table_header[tmp_index]>dem_range then
+					begin
+							raise notice 'upper:%,lower:%',tmp_index,tmp_index-1;
+							lower_index:=tmp_index;
+							upper_index:=tmp_index-1;
+							exit;
+					end;
+				end if;
+			end;
+		end loop;
 
-		foreach cur_height in array heights loop
+		-- берем высоты
+		select array_agg(h_arr) from (select distinct id as h_arr 
+		from public.table_heghts where measure_type=2 order by id) into heights;
+
+		raise notice '%,l_ind:%,u_ind:%',heights,lower_index,upper_index;
+		foreach cur_height in ARRAY heights loop
 		begin
-			select bullet_demolition,alpha from public.calc_wind_correction
-			where height=cur_height into line,line_alpha;
-			if line_index is null then 
+			select data_positive,delta from public.table_values 
+			where id_height = cur_height 
+			into table_line,alpha;
+			raise notice 'array:%,alpha:%',table_line,alpha;
+			if lower_index is null then 
 			begin
 				raise notice 'speed=%; alpha=%',0,alpha;
 				ret_speed:=ret_speed|| 0;
@@ -744,10 +762,13 @@ begin
 			end;
 			else
 				begin
-					speed:=line[line_index]+(line[line_index+1]-line[line_index])*0.1;
-					raise notice 'speed=%; alpha=%',speed,line_alpha;
+					speed:=table_line[lower_index]+(table_line[upper_index]-table_line[lower_index])*0.1;
+					raise notice 'speed=%; alpha=%',speed,alpha;
+					if speed is null then 
+						speed:=0;
+					end if;
 					ret_speed:=ret_speed|| speed::numeric;
-					ret_alph:=ret_alph||line_alpha::numeric;
+					ret_alph:=ret_alph||alpha::numeric;
 				end;
 			end if;
 		end;
@@ -942,11 +963,9 @@ end$$;
 -- демонстрация 
 do $$
 declare 
-	a numeric[];
-	b numeric[];
 begin
-	-- расчет ветра 
-	-- call public.sp_get_wind_correction(56,5,a,b);
+	call public.sp_get_temperature_air(-23);
+	call public.sp_get_wind_correction(75,0);
 end $$;
 
 -- TODO 28.02.2025:
