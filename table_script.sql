@@ -37,9 +37,9 @@ begin
 	DROP TABLE IF EXISTS public.log_events;
 	DROP TABLE IF EXISTS public.calc_wind_correction;
 	drop table if exists public.calc_wind_table_correction;
-	drop TABLE IF NOT EXISTS public.table_header;
-	drop TABLE IF NOT EXISTS public.table_heghts;
-	drop TABLE IF NOT EXISTS public.table_values;
+	drop TABLE IF EXISTS public.table_header;
+	drop TABLE IF EXISTS public.table_heghts;
+	drop TABLE IF EXISTS public.table_values;
 	-- Константы
 	drop table if exists public.measure_settings;
 
@@ -54,6 +54,7 @@ begin
 	drop sequence if exists public.log_events_seq;
 	drop sequence if exists public.table_heghts_seq;
 	drop sequence if exists public.table_header_seq;
+	drop sequence if exists public.table_values_seq;
 	-- Типы данных
 	DROP TYPE IF EXISTS public.input_parameters CASCADE;
 
@@ -227,6 +228,9 @@ CREATE TABLE IF NOT EXISTS public.table_values
     delta integer,
 	constraint table_values_pkey PRIMARY KEY (id)
 );
+create sequence table_values_seq start 1;
+
+alter table table_values alter column id set default nextval('public.table_values_seq');
 
 -- вставляем данные таблицы для таблицы 2 
 insert into public.table_values(id_height,data_positive,data_negative,delta)
@@ -583,60 +587,119 @@ begin
 
 
 	-- операции
-
 	-- табличный расчет температуры
+	-- операции
 	CREATE OR REPLACE PROCEDURE public.sp_get_temperature_air(
 		IN inp_temp numeric,
 		INOUT ret numeric[] default array[]::numeric[]) 
 	LANGUAGE 'plpgsql'
 	AS $BODY$
 	declare 
-		abs_temp numeric;
-		diff_temp numeric;
-		border_initial numeric;
-		border_addit numeric;
-		line integer[];
-		cur_height integer;
+		table_header integer[];
+		table_line_pos integer[];
+		table_line_neg integer[];
 		heights integer[];
+		cur_height integer;
+		head_index integer;
+		upper_index integer;
+		lower_index integer;
+		abs_temp integer;
+		tmp numeric;
+		tmp_index integer;
+		arr_l integer;
 	begin
 		inp_temp:=floor(inp_temp);
 		abs_temp:=abs(inp_temp);
-		if abs_temp>10 then
-		begin
-			select index,temperature from public.calc_air_table_correction as t1 where t1.temperature<abs_temp order by t1.temperature desc limit 1 into border_initial,diff_temp;
-			select index from public.calc_air_table_correction as t1 where t1.temperature=abs_temp-diff_temp limit 1 into border_addit;
-		end;
+
+		select header_values from public.table_header where table_type=1 and 
+		measure_type=1 into table_header;
+
+		if table_header is null then 
+			raise exception 'table header not found';
+		end if;
+
+		arr_l:=array_length(table_header,1)-1 ;
+		-- получить индекс 
+		raise notice 'abs:%,inp:%,chk:%',abs_temp,inp_temp,(abs_temp>10) and not (abs_temp%10=0);
+		if (abs_temp>10) and not (abs_temp%10=0) then
+			begin 
+				for tmp_index in 0..arr_l loop
+					begin
+						if table_header[tmp_index]>abs_temp then
+							begin
+								raise notice 'lower:%',tmp_index;
+								lower_index:=tmp_index;
+								exit;
+							end;
+						end if;
+					end;
+				end loop;
+			for tmp_index in 0..arr_l loop
+					begin
+						if table_header[tmp_index]>abs_temp-table_header[lower_index-1] then
+							begin
+								raise notice 'upper:%',tmp_index;
+								upper_index:=tmp_index;
+								exit;
+							end;
+						end if;
+					end;
+				end loop;
+			end;
 		else
-			select index from public.calc_air_table_correction as t1 where t1.temperature=abs_temp order by t1.temperature desc limit 1 into border_initial;
+			begin
+				for tmp_index in 0..arr_l loop
+					begin
+						if table_header[tmp_index]>abs_temp then
+							begin
+								raise notice 'lower:%',tmp_index;
+								lower_index:=tmp_index;
+								exit;
+							end;
+						end if;
+					end;
+				end loop;
+			end;
 		end if;
-
-
-		-- проверки
-		if border_initial is null or diff_temp is null then
-			raise exception 'parameters for temperature % are not found',abs_temp;
-		end if;
-
-
 
 		-- берем высоты
-		select array_agg(h_arr) from (select distinct height as h_arr from public.calc_temperature_air order by height) into heights;
+		select array_agg(h_arr) from (select distinct id as h_arr 
+		from public.table_heghts where measure_type=1 order by id) into heights;
 
-		raise notice '%',heights;
-		foreach cur_height in array heights loop
+		raise notice '%,l_ind:%,u_ind:%',heights,lower_index,upper_index;
+		foreach cur_height in ARRAY heights loop
 		begin
-			select data from public.calc_temperature_air where public.calc_temperature_air.height = cur_height and public.calc_temperature_air.is_positive=(inp_temp>0) into line;
-			if abs_temp>10 then
-				ret:=ret|| (line[border_initial-1]+line[border_addit-1]);
+			select data_positive,data_negative from public.table_values 
+			where id_height = cur_height 
+			into table_line_pos,table_line_neg;
+			raise notice 'pos:%,neg:%',table_line_pos,table_line_neg;
+			if inp_temp>0 then
+				begin
+					if upper_index is not null then
+						tmp:= (table_line_pos[lower_index-1]+table_line_pos[upper_index-1])::numeric;
+					else
+						tmp:= (table_line_pos[lower_index-1])::numeric;
+					end if;
+				end;
 			else
-				ret:=ret|| (line[border_initial]);
+				begin
+					if upper_index is not null then
+						tmp:=(table_line_neg[lower_index-1]+table_line_neg[upper_index-1])::numeric;
+					else
+						tmp:=(table_line_neg[lower_index-1])::numeric;
+					end if;
+				end;
 			end if;
-
+			raise notice 'corr:%',tmp;
+			ret:=ret || tmp;
 		end;
 		end loop;
 		raise notice '%',ret;
 
 	end;
 	$BODY$;
+
+
 
 
 	-- табличный расчет ветра
@@ -883,7 +946,7 @@ declare
 	b numeric[];
 begin
 	-- расчет ветра 
-	call public.sp_get_wind_correction(56,5,a,b);
+	-- call public.sp_get_wind_correction(56,5,a,b);
 end $$;
 
 -- TODO 28.02.2025:
