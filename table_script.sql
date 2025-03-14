@@ -59,7 +59,7 @@ begin
 	DROP TYPE IF EXISTS public.input_parameters CASCADE;
 
 
-	DROP PROCEDURE public.sp_get_temperature_air(numeric, numeric[]);
+	DROP PROCEDURE if exists public.sp_get_temperature_air(numeric, numeric[]);
 end;
 
 raise notice 'Удаление старых данных выполнено успешно';
@@ -961,19 +961,12 @@ end$$;
 
 
 -- демонстрация 
-do $$
-declare 
-begin
-	call public.sp_get_temperature_air(-23);
-	call public.sp_get_wind_correction(75,0);
-end $$;
-
--- TODO 28.02.2025:
--- 1. в отчете вынести вычесляемое поле из order by - (думать)
--- 2. проверка на отсутствие ранга (поменять inner join на left join или сделать запрет not null в military ranks) - СДЕЛАНО 78 строка
--- 3. переделать отчет под cte
--- 4. формата последний в должности|неверные измерения
-
+-- do $$
+-- declare 
+-- begin
+-- 	call public.sp_get_temperature_air(-23);
+-- 	call public.sp_get_wind_correction(75,0);
+-- end $$;
 
 
 
