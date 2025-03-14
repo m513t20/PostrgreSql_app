@@ -22,14 +22,24 @@ begin
 	alter table if exists public.measurment_baths
 	drop constraint if exists emploee_id_fk;
 
+	alter table if exists public.log_events
+	drop constraint if exists log_type_id_fk;
+
 	-- Таблицы
-	drop table if exists public.measurment_input_params;
+	drop table if exists public.measurment_input_params CASCADE;
 	drop table if exists public.measurment_baths;
 	drop table if exists public.employees;
-	drop table if exists public.measurment_types;
+	drop table if exists public.measurment_types cascade;
 	drop table if exists public.military_ranks;
 	drop table if exists public.calc_temperature_air;
 	drop table if exists public.calc_air_table_correction;
+	DROP TABLE IF EXISTS public.log_types;
+	DROP TABLE IF EXISTS public.log_events;
+	DROP TABLE IF EXISTS public.calc_wind_correction;
+	drop table if exists public.calc_wind_table_correction;
+	drop TABLE IF EXISTS public.table_header;
+	drop TABLE IF EXISTS public.table_heghts;
+	drop TABLE IF EXISTS public.table_values;
 	-- Константы
 	drop table if exists public.measure_settings;
 
@@ -40,12 +50,16 @@ begin
 	drop sequence if exists public.military_ranks_seq;
 	drop sequence if exists public.measurment_types_seq;
 	drop sequence if exists public.calc_temperature_air_seq;
-
+	drop sequence if exists public.log_types_seq;
+	drop sequence if exists public.log_events_seq;
+	drop sequence if exists public.table_heghts_seq;
+	drop sequence if exists public.table_header_seq;
+	drop sequence if exists public.table_values_seq;
 	-- Типы данных
 	DROP TYPE IF EXISTS public.input_parameters CASCADE;
 
 
-	DROP PROCEDURE public.sp_get_temperature_air(numeric, numeric[]);
+	DROP PROCEDURE if exists public.sp_get_temperature_air(numeric, numeric[]);
 end;
 
 raise notice 'Удаление старых данных выполнено успешно';
@@ -75,7 +89,7 @@ create table employees
     id integer primary key not null,
 	name text,
 	birthday timestamp ,
-	military_rank_id integer
+	military_rank_id integer not null
 );
 
 insert into employees(id, name, birthday,military_rank_id )  
@@ -162,106 +176,130 @@ insert into public.measure_settings(setting_name,setting_value) values ('wind_sp
 insert into public.measure_settings(setting_name,setting_value) values ('bullet_demolition_min','0');
 insert into public.measure_settings(setting_name,setting_value) values ('bullet_demolition_max','150');
 
--- Таблица для расчета поправки температуры
-CREATE TABLE public.calc_temperature_air 
+
+
+-- ===таблицы для расчета===
+
+-- таблица заголовков
+CREATE TABLE IF NOT EXISTS public.table_header
 (
-	id integer primary key not null default nextval('public.calc_temperature_air_seq'),
-	measurment_types_id integer not null,
-	height integer not null,
-	is_positive boolean not null,
-	data integer[] not null
+    id integer NOT NULL,
+    measure_type integer NOT NULL,
+	table_type integer NOT NULL,
+    header_values integer[] NOT NULL,
+	description character varying(100),
+    CONSTRAINT table_header_pkey PRIMARY KEY (id)
 );
 
--- 200
-insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (200,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
-insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (200,1,False,array[-1,-2,-3,-4,-5,-6,-7,-8,-9,-20,-29,-39,-49]);
+create sequence table_header_seq start 1;
 
--- 400
-insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (400,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
-insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (400,1,False,array[-1,-2,-3,-4,-5,-6,-6,-7,-8,-9,-19,-20,-38,-48]);
+alter table table_header alter column id set default nextval('public.table_header_seq');
 
--- 800
-insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (800,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
-insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (800,1,False,array[-1,-2,-3,-4,-5,-6,-6,-7,-7,-8,-18,-28,-37,-46]);
-
--- 1200
-insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (1200,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
-insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (1200,1,False,array[-1,-2,-3,-4,-4,-5,-5,-6,-7,-8,-17,-26,-35,-44]);
-
--- 1600
-insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (1600,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
-insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (1600,1,False,array[-1,-2,-3,-3,-4,-4,-5,-6,-7,-7,-17,-25,-34,-42]);
-
--- 2000
-insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (2000,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
-insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (2000,1,False,array[-1,-2,-3,-3,-4,-4,-5,-6,-6,-7,-16,-24,-32,-40]);
-
--- 2400
-insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (2400,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
-insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (2400,1,False,array[-1,-2,-2,-3,-4,-4,-5,-5,-6,-7,-15,-23,-31,-38]);
-
--- 3000
-insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (3000,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
-insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (3000,1,False,array[-1,-2,-2,-3,-4,-4,-4,-5,-5,-6,-15,-22,-30,-37]);
-
--- 4000
-insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (4000,1,True,array[1,2,3,4,5,6,7,8,9,10,20,30]);
-insert into public.calc_temperature_air (height,measurment_types_id,is_positive,data)
-values (4000,1,False,array[-1,-2,-2,-3,-4,-4,-4,-4,-5,-6,-14,-20,-27,-34]);
+insert into public.table_header(measure_type,table_type,header_values,description)
+values(1,1,array[1,2,3,4,5,6,7,8,9,10,20,30,40,50],' ДМК и ВР таблица 2');
+insert into public.table_header(measure_type,table_type,header_values,description)
+values(2,2,array[40,50,60,70,80,90,100,110,120,130,140,150],' ВР таблица 3');
 
 
--- шапка таблицы (по ней выбираем индекс значения и считаем интерполяцию)
-CREATE TABLE IF NOT EXISTS public.calc_air_table_correction
+-- высоты
+CREATE TABLE IF NOT EXISTS public.table_heghts
 (
-    temperature integer primary key NOT NULL,
-    index integer NOT NULL
+    id integer NOT NULL,
+    height integer NOT NULL,
+	measure_type integer NOT NULL,
+    CONSTRAINT table_heghts_pkey PRIMARY KEY (id)
 );
 
-insert into public.calc_air_table_correction (temperature,index) 
-values (1,1);
-insert into public.calc_air_table_correction (temperature,index) 
-values (2,2);
-insert into public.calc_air_table_correction (temperature,index) 
-values (3,3);
-insert into public.calc_air_table_correction (temperature,index) 
-values (4,4);
-insert into public.calc_air_table_correction (temperature,index) 
-values (5,5);
-insert into public.calc_air_table_correction (temperature,index) 
-values (6,6);
-insert into public.calc_air_table_correction (temperature,index) 
-values (7,7);
-insert into public.calc_air_table_correction (temperature,index) 
-values (8,8);
-insert into public.calc_air_table_correction (temperature,index) 
-values (9,9);
-insert into public.calc_air_table_correction (temperature,index) 
-values (10,10);
-insert into public.calc_air_table_correction (temperature,index) 
-values (20,11);
-insert into public.calc_air_table_correction (temperature,index) 
-values (30,12);
-insert into public.calc_air_table_correction (temperature,index) 
-values (40,13);
-insert into public.calc_air_table_correction (temperature,index) 
-values (50,14);
+create sequence table_heghts_seq start 1;
+
+alter table table_heghts alter column id set default nextval('public.table_heghts_seq');
+
+insert into table_heghts(height,measure_type)
+values (200,1),(400,1),(800,1),(1200,1),(1600,1),(2000,1),(2400,1),(3000,1),(4000,1),
+(200,2),(400,2),(800,2),(1200,2),(1600,2),(2000,2),(2400,2),(3000,2),(4000,2);
+
+-- таблица значений
+CREATE TABLE IF NOT EXISTS public.table_values
+(
+	id integer not null,
+    id_height integer NOT NULL,
+    data_positive integer[],
+	data_negative integer[],
+    delta integer,
+	constraint table_values_pkey PRIMARY KEY (id)
+);
+create sequence table_values_seq start 1;
+
+alter table table_values alter column id set default nextval('public.table_values_seq');
+
+-- вставляем данные таблицы для таблицы 2 
+insert into public.table_values(id_height,data_positive,data_negative,delta)
+values(1,array[1,2,3,4,5,6,7,8,9,10,20,30],array[-1,-2,-3,-4,-5,-6,-7,-8,-9,-20,-29,-39,-49],null),
+(2,array[1,2,3,4,5,6,7,8,9,10,20,30],array[-1,-2,-3,-4,-5,-6,-6,-7,-8,-9,-19,-20,-38,-48],null),
+(3,array[1,2,3,4,5,6,7,8,9,10,20,30],array[-1,-2,-3,-4,-5,-6,-6,-7,-7,-8,-18,-28,-37,-46],null),
+(4,array[1,2,3,4,5,6,7,8,9,10,20,30],array[-1,-2,-3,-4,-4,-5,-5,-6,-7,-8,-17,-26,-35,-44],null),
+(5,array[1,2,3,4,5,6,7,8,9,10,20,30],array[-1,-2,-3,-3,-4,-4,-5,-6,-7,-7,-17,-25,-34,-42],null),
+(6,array[1,2,3,4,5,6,7,8,9,10,20,30],array[-1,-2,-3,-3,-4,-4,-5,-6,-6,-7,-16,-24,-32,-40],null),
+(7,array[1,2,3,4,5,6,7,8,9,10,20,30],array[-1,-2,-2,-3,-4,-4,-5,-5,-6,-7,-15,-23,-31,-38],null),
+(8,array[1,2,3,4,5,6,7,8,9,10,20,30],array[-1,-2,-2,-3,-4,-4,-4,-5,-5,-6,-15,-22,-30,-37],null),
+(9,array[1,2,3,4,5,6,7,8,9,10,20,30],array[-1,-2,-2,-3,-4,-4,-4,-4,-5,-6,-14,-20,-27,-34],null);
+
+
+-- вставляем данные для таблицы 3
+insert into public.table_values(id_height,data_positive,data_negative,delta)
+values (10,array[3,4,5,6,7,7,8,9,10,11,12,12],null,0),(11,array[4,5,6,7,8,9,10,11,12,13,14,15],null,1),
+(12,array[4,5,6,7,8,9,10,11,13,14,15,16],null,2),(13,array[4,5,7,8,8,9,11,12,13,15,15,16],null,2),
+(14,array[4,6,7,8,9,10,11,13,14,15,17,17],null,3),(15,array[4,6,7,8,9,10,11,13,14,16,17,18],null,3),
+(16,array[4,6,8,9,9,10,12,14,15,16,18,19],null,3),(17,array[5,6,8,9,10,11,12,14,15,17,18,19],null,4),
+(18,array[5,6,8,9,10,11,12,14,16,18,19,20],null,4);
+
+-- ===================================================================================================================
+
+
+
+-- Типы логов
+CREATE TABLE IF NOT EXISTS public.log_types
+(
+    id integer NOT NULL,
+    name character varying(100) COLLATE pg_catalog."default",
+    CONSTRAINT log_types_pkey PRIMARY KEY (id)
+);
+
+create sequence log_types_seq start 1;
+
+alter table public.log_types alter column id set default nextval('public.log_types_seq');
+
+insert into public.log_types(name) values('input');
+insert into public.log_types(name) values('error');
+
+-- Логи
+CREATE TABLE IF NOT EXISTS public.log_events
+(
+    id integer NOT NULL DEFAULT nextval('log_types_seq'::regclass),
+    log_type_id integer NOT NULL,
+    event_log json,
+    event_time timestamp without time zone DEFAULT now(),
+    CONSTRAINT log_events_pkey PRIMARY KEY (id)
+);
+
+create sequence log_events_seq start 1;
+
+
+alter table public.log_events alter column id set default nextval('public.log_types_seq');
+
+-- индексы
+
+create index ix_measurment_baths_emploee_id 
+on public.measurment_baths(emploee_id);
+
+create index ix_employees_military_rank_id 
+on public.employees(military_rank_id );
+
+create index ix_log_type_id 
+on public.log_events(log_type_id);
+
+
+
 
 raise notice 'Создание общих констант для рассчетов выполнено успешно';
 
@@ -319,6 +357,10 @@ begin
 	foreign key(military_rank_id)
 	references public.military_ranks (id);
 
+	alter table public.log_events
+	add constraint log_type_id_fk
+	foreign key(log_type_id)
+	references public.log_types (id);
 end;
 
 raise notice 'Связи сформированы';
@@ -336,7 +378,8 @@ begin
 		temperature numeric(8,2),
 		pressure numeric(8,2),
 		wind_direction numeric(8,2),
-		wind_speed numeric(8,2)
+		wind_speed numeric(8,2),
+		is_counted boolean
 	);
 end;
 
@@ -439,19 +482,21 @@ begin
 	AS $BODY$
 	begin
 		return public.verify_param(temperature,'temperature',public.get_setting_num('temperature_min'),public.get_setting_num('temperature_max')) AND  public.verify_param(pressure,'pressure',public.get_setting_num('pressure_min'),public.get_setting_num('pressure_max')) AND  public.verify_param(temperature,'wind_direction',public.get_setting_num('wind_direction_min'),public.get_setting_num('wind_direction_max'));
-		exception when others then
+		exception when others then begin
+		-- {user,error_type,error_code}
 		return 0;
+		end;
 	end;
 	$BODY$;
 
 
 	-- получить тип из параметров
 	CREATE OR REPLACE FUNCTION public.get_input_params(
-		height numeric(8,2),
-		temperature numeric(8,2),
-		pressure numeric(8,2),
-		wind_direction numeric(8,2),
-		wind_speed numeric(8,2))
+		height_inp numeric(8,2),
+		temperature_inp numeric(8,2),
+		pressure_inp numeric(8,2),
+		wind_direction_inp numeric(8,2),
+		wind_speed_inp numeric(8,2))
 		RETURNS input_parameters
 		LANGUAGE 'plpgsql'
 		COST 100
@@ -459,15 +504,24 @@ begin
 	AS $BODY$
 	declare 
 		res public.input_parameters;
+		counted_id integer;
 	begin
-		if NOT public.verify(temperature,pressure,wind_direction) then
+		if NOT public.verify(temperature_inp,pressure_inp,wind_direction_inp) then
 			raise exception 'Неправельно введены данные';
 		end if;
-		res.height:=height;
-		res.temperature:=temperature;
-		res.pressure:=pressure;
-		res.wind_direction:=wind_direction;
-		res.wind_speed:=wind_speed;
+		res.height:=height_inp;
+		res.temperature:=temperature_inp;
+		res.pressure:=pressure_inp;
+		res.wind_direction:=wind_direction_inp;
+		res.wind_speed:=wind_speed_inp;
+		select id from public.measurment_input_params order by id desc limit 1 into counted_id;
+
+		res.is_counted:=(counted_id is NOT null);
+
+		if not res.is_counted then 
+			call public.sp_make_log_inp(row_to_json(res));
+		end if;
+
 		return res;
 
 	end;
@@ -533,62 +587,239 @@ begin
 
 
 	-- операции
-
 	-- табличный расчет температуры
+	-- операции
 	CREATE OR REPLACE PROCEDURE public.sp_get_temperature_air(
 		IN inp_temp numeric,
 		INOUT ret numeric[] default array[]::numeric[]) 
 	LANGUAGE 'plpgsql'
 	AS $BODY$
 	declare 
-		abs_temp numeric;
-		diff_temp numeric;
-		border_initial numeric;
-		border_addit numeric;
-		line integer[];
-		cur_height integer;
+		table_header integer[];
+		table_line_pos integer[];
+		table_line_neg integer[];
 		heights integer[];
+		cur_height integer;
+		upper_index integer;
+		lower_index integer;
+		abs_temp integer;
+		tmp numeric;
+		tmp_index integer;
+		arr_l integer;
 	begin
 		inp_temp:=floor(inp_temp);
 		abs_temp:=abs(inp_temp);
-		if abs_temp>10 then
-		begin
-			select index,temperature from public.calc_air_table_correction as t1 where t1.temperature<abs_temp order by t1.temperature desc limit 1 into border_initial,diff_temp;
-			select index from public.calc_air_table_correction as t1 where t1.temperature=abs_temp-diff_temp limit 1 into border_addit;
-		end;
+
+		select header_values from public.table_header where table_type=1 and 
+		measure_type=1 into table_header;
+
+		if table_header is null then 
+			raise exception 'table header not found';
+		end if;
+
+		arr_l:=array_length(table_header,1)-1 ;
+		-- получить индекс 
+		raise notice 'abs:%,inp:%,chk:%',abs_temp,inp_temp,(abs_temp>10) and not (abs_temp%10=0);
+		if (abs_temp>10) and not (abs_temp%10=0) then
+			begin 
+				for tmp_index in 0..arr_l loop
+					begin
+						if table_header[tmp_index]>abs_temp then
+							begin
+								raise notice 'lower:%',tmp_index;
+								lower_index:=tmp_index;
+								exit;
+							end;
+						end if;
+					end;
+				end loop;
+			for tmp_index in 0..arr_l loop
+					begin
+						if table_header[tmp_index]>abs_temp-table_header[lower_index-1] then
+							begin
+								raise notice 'upper:%',tmp_index;
+								upper_index:=tmp_index;
+								exit;
+							end;
+						end if;
+					end;
+				end loop;
+			end;
 		else
-			select index from public.calc_air_table_correction as t1 where t1.temperature=abs_temp order by t1.temperature desc limit 1 into border_initial;
+			begin
+				for tmp_index in 0..arr_l loop
+					begin
+						if table_header[tmp_index]>abs_temp then
+							begin
+								raise notice 'lower:%',tmp_index;
+								lower_index:=tmp_index;
+								exit;
+							end;
+						end if;
+					end;
+				end loop;
+			end;
 		end if;
-
-
-		-- проверки
-		if border_initial is null or diff_temp is null then
-			raise exception 'parameters for temperature % are not found',abs_temp;
-		end if;
-
-
 
 		-- берем высоты
-		select array_agg(h_arr) from (select distinct height as h_arr from public.calc_temperature_air order by height) into heights;
+		select array_agg(h_arr) from (select distinct id as h_arr 
+		from public.table_heghts where measure_type=1 order by id) into heights;
 
-		raise notice '%',heights;
-		foreach cur_height in array heights loop
+		raise notice '%,l_ind:%,u_ind:%',heights,lower_index,upper_index;
+		foreach cur_height in ARRAY heights loop
 		begin
-			select data from public.calc_temperature_air where public.calc_temperature_air.height = cur_height and public.calc_temperature_air.is_positive=(inp_temp>0) into line;
-			if abs_temp>10 then
-				ret:=ret|| (line[border_initial-1]+line[border_addit-1]);
+			select data_positive,data_negative from public.table_values 
+			where id_height = cur_height 
+			into table_line_pos,table_line_neg;
+			raise notice 'pos:%,neg:%',table_line_pos,table_line_neg;
+			if inp_temp>0 then
+				begin
+					if upper_index is not null then
+						tmp:= (table_line_pos[lower_index-1]+table_line_pos[upper_index-1])::numeric;
+					else
+						tmp:= (table_line_pos[lower_index-1])::numeric;
+					end if;
+				end;
 			else
-				ret:=ret|| (line[border_initial]);
+				begin
+					if upper_index is not null then
+						tmp:=(table_line_neg[lower_index-1]+table_line_neg[upper_index-1])::numeric;
+					else
+						tmp:=(table_line_neg[lower_index-1])::numeric;
+					end if;
+				end;
 			end if;
-
+			raise notice 'corr:%',tmp;
+			ret:=ret || tmp;
 		end;
 		end loop;
 		raise notice '%',ret;
 
 	end;
 	$BODY$;
-	ALTER PROCEDURE public.sp_get_temperature_air(numeric, numeric[])
-		OWNER TO admin;
+
+
+
+
+	-- табличный расчет ветра
+	CREATE OR REPLACE PROCEDURE public.sp_get_wind_correction(
+		IN dem_range integer,
+		IN wind_alph integer,
+		INOUT ret_speed numeric[] default array[]::numeric[],
+		INOUT ret_alph  numeric[] default array[]::numeric[])
+	LANGUAGE 'plpgsql'
+	AS $BODY$
+	declare
+		table_header integer[];
+		table_line integer[];
+		heights integer[];
+		alpha integer;
+		cur_height integer;
+		upper_index integer;
+		lower_index integer;
+		speed numeric;
+		tmp numeric;
+		tmp_index integer;
+		arr_l integer;
+	begin
+		select header_values from public.table_header where table_type=2 and 
+		measure_type=2 into table_header;
+
+		if table_header is null then 
+			raise exception 'table header not found';
+		end if;
+
+		arr_l:=array_length(table_header,1)-1 ;
+		for tmp_index in 0..arr_l loop
+			begin
+				if table_header[tmp_index]>dem_range then
+					begin
+							raise notice 'upper:%,lower:%',tmp_index,tmp_index-1;
+							lower_index:=tmp_index;
+							upper_index:=tmp_index-1;
+							exit;
+					end;
+				end if;
+			end;
+		end loop;
+
+		-- берем высоты
+		select array_agg(h_arr) from (select distinct id as h_arr 
+		from public.table_heghts where measure_type=2 order by id) into heights;
+
+		raise notice '%,l_ind:%,u_ind:%',heights,lower_index,upper_index;
+		foreach cur_height in ARRAY heights loop
+		begin
+			select data_positive,delta from public.table_values 
+			where id_height = cur_height 
+			into table_line,alpha;
+			raise notice 'array:%,alpha:%',table_line,alpha;
+			if lower_index is null then 
+			begin
+				raise notice 'speed=%; alpha=%',0,alpha;
+				ret_speed:=ret_speed|| 0;
+				ret_alph:=ret_alph||alpha;
+			end;
+			else
+				begin
+					speed:=table_line[lower_index]+(table_line[upper_index]-table_line[lower_index])*0.1;
+					raise notice 'speed=%; alpha=%',speed,alpha;
+					if speed is null then 
+						speed:=0;
+					end if;
+					ret_speed:=ret_speed|| speed::numeric;
+					ret_alph:=ret_alph||alpha::numeric;
+				end;
+			end if;
+		end;
+		end loop;
+	end;
+	$BODY$;
+
+
+
+
+	-- логирование
+	CREATE OR REPLACE PROCEDURE public.sp_make_log(
+	IN log_type integer,
+	IN log_data json)
+	LANGUAGE 'plpgsql'
+	AS $BODY$
+	declare
+		check_log_type integer;
+	begin
+		select id from public.log_types where id=log_type into check_log_type;
+		if check_log_type is null then
+			raise exception 'no such log type: %',log_type;
+		end if;
+
+		insert into public.log_events(log_type_id,event_log) 
+		values (log_type,log_data);
+	end;
+	$BODY$;
+
+
+	--логирование входа
+	CREATE OR REPLACE PROCEDURE public.sp_make_log_inp(
+		IN log_data json)
+	LANGUAGE 'plpgsql'
+	AS $BODY$
+	begin
+	call sp_make_log(1,log_data);
+	end;
+	$BODY$;
+
+	-- error 
+	CREATE OR REPLACE PROCEDURE public.sp_make_log_inp(
+		IN log_data json)
+	LANGUAGE 'plpgsql'
+	AS $BODY$
+	begin
+	call sp_make_log(2,log_data);
+	end;
+	$BODY$;
+
+	
 
 end;
 
@@ -652,38 +883,90 @@ begin
 		insert into public.measurment_baths(emploee_id, measurment_input_param_id, started) values(emploeeid ,u_id,now());
 
 		
-		raise notice 'h: %, temp: %, pres: %, wind_dir: %, dependent: %',height_param,temp_param,pressure_param,wind_param,dependent_param;
+		-- raise notice 'h: %, temp: %, pres: %, wind_dir: %, dependent: %',height_param,temp_param,pressure_param,wind_param,dependent_param;
 	end;
 	end loop;
-	-- raise notice 'тестовые данные готовы';
+	raise notice 'тестовые данные готовы';
 	
 end$$;
 
 
+
+
+
+
+
+
+-- Отчеты
 do $$
 begin
-	-- создать отчет
-	select name,description, all_measures, all_measures - true_measures as false_measure
-	from (
-	SELECT t3.name,t4.description,(count(*) ) as all_measures,sum(public.verify_without_bool(t2.temperature,t2.pressure,t2.wind_direction)::integer) as true_measures
-		FROM public.measurment_baths as t1 inner join public.measurment_input_params as t2
-		on t1.measurment_input_param_id=t2.id
-		inner join public.employees as t3 on t3.id=t1.emploee_id
-		inner join public.military_ranks as t4 on t3.military_rank_id=t4.id
-		group by t3.name,description
-		) as t1 order by false_measure
+	-- создать отчет cte
+	CREATE OR REPLACE VIEW public.view_original
+	AS
+	with get_measure_verified as ( SELECT t1_1.emploee_id,t3.name,
+						t4.description,
+						count(*) AS all_measures,
+						sum(verify_without_bool(t2.temperature, t2.pressure, t2.wind_direction)::integer) AS true_measures
+					FROM measurment_baths t1_1
+						JOIN measurment_input_params t2 ON t1_1.measurment_input_param_id = t2.id
+						JOIN employees t3 ON t3.id = t1_1.emploee_id
+						JOIN military_ranks t4 ON t3.military_rank_id = t4.id
+					GROUP BY t3.name, t4.description, t1_1.emploee_id
+	)
+	SELECT emploee_id,
+		name,
+		description,
+		all_measures,
+		all_measures-true_measures as false_measure
+	FROM get_measure_verified order by all_measures-true_measures desc;
+
+
+
+
+	-- отчет минимум 10 ошибок
+	CREATE OR REPLACE VIEW public.view_best_height
+	AS
+	with get_measure_verified as ( SELECT t1_1.emploee_id,t3.name,
+						t4.description,
+						count(*) AS all_measures,
+						sum(verify_without_bool(t2.temperature, t2.pressure, t2.wind_direction)::integer) AS true_measures
+					FROM measurment_baths t1_1
+						JOIN measurment_input_params t2 ON t1_1.measurment_input_param_id = t2.id
+						JOIN employees t3 ON t3.id = t1_1.emploee_id
+						JOIN military_ranks t4 ON t3.military_rank_id = t4.id
+					GROUP BY t3.name, t4.description, t1_1.emploee_id
+	),
+	get_height as (select t2.emploee_id,min(t1.height) as min_h,max(t1.height) as max_h
+		from measurment_input_params t1 inner join
+		measurment_baths t2 on t2.measurment_input_param_id=t1.id 
+		group by t2.emploee_id
+	)
+	SELECT 
+		t1.name,
+		t1.description,
+		t2.min_h,
+		t2.max_h,
+		t1.all_measures,
+		t1.all_measures-t1.true_measures as false_measure
+	FROM get_measure_verified t1 inner join
+	get_height t2 on t2.emploee_id=t1.emploee_id
+	where t1.all_measures>5 and t1.all_measures-t1.true_measures<10;
+
 
 end$$;
 
 
--- TODO : 
--- 1 переделать verify чтобы она могла говорить какая конкретно переменная передана некорректно - СДЕЛАНО СТРОКА 407
--- 2 сделать проверку на null при verify - СДЕЛАНО СТРОКА 403
--- 3 добавить проверок при остуствии константы в таблицах - СДЕЛАНО СТРОКА 361
--- Доделлать
 
 
 
+
+-- демонстрация 
+-- do $$
+-- declare 
+-- begin
+-- 	call public.sp_get_temperature_air(-23);
+-- 	call public.sp_get_wind_correction(75,0);
+-- end $$;
 
 
 
