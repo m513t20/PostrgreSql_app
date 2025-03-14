@@ -961,14 +961,9 @@ end$$;
 
 
 -- демонстрация 
--- do $$
--- declare 
--- begin
--- 	call public.sp_get_temperature_air(-23);
--- 	call public.sp_get_wind_correction(75,0);
--- end $$;
 
-
+call public.sp_get_temperature_air(-23);
+call public.sp_get_wind_correction(75,0);
 
 
 
