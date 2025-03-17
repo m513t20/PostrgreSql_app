@@ -25,6 +25,9 @@ begin
 	alter table if exists public.log_events
 	drop constraint if exists log_type_id_fk;
 
+	alter table if exists public.table_values
+	drop constraint if exists table_values_id_fk;
+
 	-- Таблицы
 	drop table if exists public.measurment_input_params CASCADE;
 	drop table if exists public.measurment_baths;
@@ -40,6 +43,7 @@ begin
 	drop TABLE IF EXISTS public.table_header;
 	drop TABLE IF EXISTS public.table_heghts;
 	drop TABLE IF EXISTS public.table_values;
+	drop TABLE IF EXISTS public.temp_input_params CASCADE;
 	-- Константы
 	drop table if exists public.measure_settings;
 
@@ -287,6 +291,33 @@ create sequence log_events_seq start 1;
 
 alter table public.log_events alter column id set default nextval('public.log_types_seq');
 
+
+-- таблица для связис фронтом
+create or replace sequence temp_input_params_seq;
+
+
+CREATE TABLE IF NOT EXISTS public.temp_input_params
+(
+    id integer NOT NULL DEFAULT nextval('temp_input_params_seq'::regclass),
+    user_name character varying(100) COLLATE pg_catalog."default",
+    error_message text COLLATE pg_catalog."default",
+    measurement_type_id integer,
+    height numeric(8,2),
+    temperature numeric(8,2),
+    presure numeric(8,2),
+    wind_direction numeric(8,2),
+    wind_speed numeric(8,2),
+    bullet_demolition_range numeric(8,2),
+    calc_result jsonb,
+    CONSTRAINT temp_input_params_pkey PRIMARY KEY (id)
+)
+
+
+
+
+
+
+
 -- индексы
 
 create index ix_measurment_baths_emploee_id 
@@ -361,6 +392,12 @@ begin
 	add constraint log_type_id_fk
 	foreign key(log_type_id)
 	references public.log_types (id);
+
+	alter table table_values
+	add constraint table_values_fk
+	foreign key(id_height)
+	references public.table_heghts (id);
+
 end;
 
 raise notice 'Связи сформированы';
@@ -581,6 +618,37 @@ begin
 	$BODY$;
 
 
+	-- Тригеры
+	
+	CREATE OR REPLACE FUNCTION public.fn_trigger_function_input_param(
+		)
+		RETURNS trigger
+		LANGUAGE 'plpgsql'
+		COST 100
+		VOLATILE PARALLEL UNSAFE
+	AS $BODY$
+	declare 
+		chk public.input_parameters;
+		text1 text;
+	begin
+		chk:=get_input_params(NEW.height, NEW.temperature, NEW.presure, NEW.wind_direction, NEW.wind_speed);
+		exception when others then begin
+			GET STACKED DIAGNOSTICS text1=MESSAGE_TEXT;
+			raise notice 'error %',text1;
+			NEW.error_message:=text1;
+			return NEW;
+		end;
+		return NEW;
+	end;
+	$BODY$;
+
+
+
+	CREATE OR REPLACE TRIGGER tr_check_input_params
+		BEFORE INSERT
+		ON public.temp_input_params
+		FOR EACH ROW
+		EXECUTE FUNCTION public.fn_trigger_function_input_param();
 
 
 
