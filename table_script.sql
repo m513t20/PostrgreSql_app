@@ -40,9 +40,9 @@ begin
 	DROP TABLE IF EXISTS public.log_events;
 	DROP TABLE IF EXISTS public.calc_wind_correction;
 	drop table if exists public.calc_wind_table_correction;
-	drop TABLE IF EXISTS public.table_header;
-	drop TABLE IF EXISTS public.table_heghts;
-	drop TABLE IF EXISTS public.table_values;
+	drop TABLE IF EXISTS public.table_header cascade;
+	drop TABLE IF EXISTS public.table_heghts cascade;
+	drop TABLE IF EXISTS public.table_values cascade;
 	drop TABLE IF EXISTS public.temp_input_params CASCADE;
 	-- Константы
 	drop table if exists public.measure_settings;
@@ -59,6 +59,7 @@ begin
 	drop sequence if exists public.table_heghts_seq;
 	drop sequence if exists public.table_header_seq;
 	drop sequence if exists public.table_values_seq;
+	drop sequence if exists temp_input_params_seq;
 	-- Типы данных
 	DROP TYPE IF EXISTS public.input_parameters CASCADE;
 
@@ -202,6 +203,8 @@ alter table table_header alter column id set default nextval('public.table_heade
 insert into public.table_header(measure_type,table_type,header_values,description)
 values(1,1,array[1,2,3,4,5,6,7,8,9,10,20,30,40,50],' ДМК и ВР таблица 2');
 insert into public.table_header(measure_type,table_type,header_values,description)
+values(1,2,array[3,4,5,6,7,8,9,10,11,12,13,14,15],' ДМК таблица 3');
+insert into public.table_header(measure_type,table_type,header_values,description)
 values(2,2,array[40,50,60,70,80,90,100,110,120,130,140,150],' ВР таблица 3');
 
 
@@ -211,6 +214,7 @@ CREATE TABLE IF NOT EXISTS public.table_heghts
     id integer NOT NULL,
     height integer NOT NULL,
 	measure_type integer NOT NULL,
+	table_type integer not null,
     CONSTRAINT table_heghts_pkey PRIMARY KEY (id)
 );
 
@@ -218,9 +222,10 @@ create sequence table_heghts_seq start 1;
 
 alter table table_heghts alter column id set default nextval('public.table_heghts_seq');
 
-insert into table_heghts(height,measure_type)
-values (200,1),(400,1),(800,1),(1200,1),(1600,1),(2000,1),(2400,1),(3000,1),(4000,1),
-(200,2),(400,2),(800,2),(1200,2),(1600,2),(2000,2),(2400,2),(3000,2),(4000,2);
+insert into table_heghts(height,table_type,measure_type)
+values (200,1,1),(400,1,1),(800,1,1),(1200,1,1),(1600,1,1),(2000,1,1),(2400,1,1),(3000,1,1),(4000,1,1),
+(200,2,2),(400,2,2),(800,2,2),(1200,2,2),(1600,2,2),(2000,2,2),(2400,2,2),(3000,2,2),(4000,2,2),
+(200,2,1),(400,2,1),(800,2,1),(1200,2,1),(1600,2,1),(2000,2,1),(2400,2,1),(3000,2,1),(4000,2,1);
 
 -- таблица значений
 CREATE TABLE IF NOT EXISTS public.table_values
@@ -256,6 +261,13 @@ values (10,array[3,4,5,6,7,7,8,9,10,11,12,12],null,0),(11,array[4,5,6,7,8,9,10,1
 (14,array[4,6,7,8,9,10,11,13,14,15,17,17],null,3),(15,array[4,6,7,8,9,10,11,13,14,16,17,18],null,3),
 (16,array[4,6,8,9,9,10,12,14,15,16,18,19],null,3),(17,array[5,6,8,9,10,11,12,14,15,17,18,19],null,4),
 (18,array[5,6,8,9,10,11,12,14,16,18,19,20],null,4);
+
+insert into public.table_values(id_height,data_positive,data_negative,delta)
+values (19,array[4,6,8,9,10,12,14,15,16,18,20,21],null,1),(20,array[5,7,10,11,12,14,17,18,20,22,23,25,27],null,2),
+(21,array[5,8,10,11,13,15,18,19,21,23,25,27,28],null,3),(22,array[5,8,11,12,13,16,19,20,22,24,26,28,30],null,3),
+(23,array[6,8,11,13,14,17,20,21,23,25,27,29,32],null,4),(24,array[6,9,11,13,14,17,20,21,24,26,28,30,32],null,4),
+(25,array[6,9,12,14,15,18,21,22,25,27,29,32,34],null,4),(26,array[6,9,12,14,15,18,21,23,25,28,30,32,36],null,5),
+(27,array[6,10,12,14,16,19,22,24,26,29,32,34,36],null,5);
 
 -- ===================================================================================================================
 
@@ -293,7 +305,7 @@ alter table public.log_events alter column id set default nextval('public.log_ty
 
 
 -- таблица для связис фронтом
-create or replace sequence temp_input_params_seq;
+create sequence temp_input_params_seq;
 
 
 CREATE TABLE IF NOT EXISTS public.temp_input_params
@@ -310,7 +322,7 @@ CREATE TABLE IF NOT EXISTS public.temp_input_params
     bullet_demolition_range numeric(8,2),
     calc_result jsonb,
     CONSTRAINT temp_input_params_pkey PRIMARY KEY (id)
-)
+);
 
 
 
@@ -320,14 +332,11 @@ CREATE TABLE IF NOT EXISTS public.temp_input_params
 
 -- индексы
 
-create index ix_measurment_baths_emploee_id 
-on public.measurment_baths(emploee_id);
+create index ix_measurment_baths_emploee_id on public.measurment_baths(emploee_id);
 
-create index ix_employees_military_rank_id 
-on public.employees(military_rank_id );
+create index ix_employees_military_rank_id on public.employees(military_rank_id );
 
-create index ix_log_type_id 
-on public.log_events(log_type_id);
+create index ix_log_type_id on public.log_events(log_type_id);
 
 
 
@@ -613,7 +622,7 @@ begin
 		VOLATILE PARALLEL UNSAFE
 	AS $BODY$
 	begin
-		return query select substring(to_char(date, 'DDHHMI'), 1, 5)::character(5), lpad(round(inp.height)::text, 4, '0')::character(4), lpad(public.get_delta_pressure(inp.pressure)::text, 3, '0') || lpad(public.get_temperature_interpolation(inp.temperature)::text, 2, '0');
+		return query select substring(to_char(date, 'DDHHMI'), 1, 5)::character(5), lpad(round(inp.height)::text, 4, '0')::character(4), lpad(public.get_delta_pressure(inp.pressure)::integer::text, 3, '0') || lpad(public.get_temperature_interpolation(inp.temperature)::text, 2, '0');
 	end;
 	$BODY$;
 
@@ -629,16 +638,56 @@ begin
 	AS $BODY$
 	declare 
 		chk public.input_parameters;
+		out_ddhhm character(5);
+		out_hhhh character(4);
+		out_ppptt text;
+		out_temperature numeric[];
+		out_alpha numeric[];
+		out_wind_corr numeric[];
+		inp_user_id integer;
+		inp_input_id integer;
 		text1 text;
+		our_time timestamp without time zone;
 	begin
 		chk:=get_input_params(NEW.height, NEW.temperature, NEW.presure, NEW.wind_direction, NEW.wind_speed);
+		raise notice 'inp_checked_ok';
+		-- оформление заголовка
+		our_time:=now();
+		select hhhh,ddhhm,ppptt from get_output_row(chk,our_time) limit 1 into out_hhhh,out_ddhhm,out_ppptt;
+
+
+		-- табличный расчет ветра
+		if NEW.wind_speed is null then 
+			call sp_get_wind_correction(NEW.bullet_demolition_range::integer,2,out_wind_corr,out_alpha);
+		else
+			call sp_get_wind_correction(NEW.wind_speed::integer,1,out_wind_corr,out_alpha);
+		end if;
+		-- табличный расчет температуры
+		call sp_get_temperature_air(NEW.temperature, out_temperature);
+
+
+		SELECT id FROM public.employees where name=NEW.user_name limit 1 into inp_user_id;
+
+
+		INSERT INTO public.measurment_input_params(
+		measurment_type_id, height, temperature, pressure, wind_direction, wind_speed, bullet_demolition_range)
+		VALUES (NEW.measurement_type_id,NEW.height, NEW.temperature,NEW.presure, NEW.wind_direction, NEW.wind_speed, NEW.bullet_demolition_range);
+		
+		select id from public.measurment_input_params order by id desc limit 1 into inp_input_id;
+		
+		INSERT INTO public.measurment_baths(
+		emploee_id, measurment_input_param_id, started)
+		VALUES (inp_user_id,inp_input_id,our_time);
+
+		NEW.calc_result:=to_jsonb(row(out_hhhh,out_ddhhm,out_ppptt,out_wind_corr,out_alpha,out_temperature));
+		return NEW;
 		exception when others then begin
 			GET STACKED DIAGNOSTICS text1=MESSAGE_TEXT;
 			raise notice 'error %',text1;
 			NEW.error_message:=text1;
 			return NEW;
 		end;
-		return NEW;
+
 	end;
 	$BODY$;
 
@@ -770,9 +819,10 @@ begin
 
 
 	-- табличный расчет ветра
+	DROP PROCEDURE sp_get_wind_correction(integer,integer,numeric[],numeric[]);
 	CREATE OR REPLACE PROCEDURE public.sp_get_wind_correction(
 		IN dem_range integer,
-		IN wind_alph integer,
+		IN inp_measure_type integer,
 		INOUT ret_speed numeric[] default array[]::numeric[],
 		INOUT ret_alph  numeric[] default array[]::numeric[])
 	LANGUAGE 'plpgsql'
@@ -791,7 +841,7 @@ begin
 		arr_l integer;
 	begin
 		select header_values from public.table_header where table_type=2 and 
-		measure_type=2 into table_header;
+		measure_type=inp_measure_type and table_type=2 into table_header;
 
 		if table_header is null then 
 			raise exception 'table header not found';
@@ -813,7 +863,7 @@ begin
 
 		-- берем высоты
 		select array_agg(h_arr) from (select distinct id as h_arr 
-		from public.table_heghts where measure_type=2 order by id) into heights;
+		from public.table_heghts where measure_type=inp_measure_type and table_type=2 order by id) into heights;
 
 		raise notice '%,l_ind:%,u_ind:%',heights,lower_index,upper_index;
 		foreach cur_height in ARRAY heights loop
@@ -830,8 +880,8 @@ begin
 			end;
 			else
 				begin
-					speed:=table_line[lower_index]+(table_line[upper_index]-table_line[lower_index])*0.1;
-					raise notice 'speed=%; alpha=%',speed,alpha;
+					speed:=table_line[lower_index]+(dem_range-table_header[lower_index])*((table_line[upper_index]-table_line[lower_index])/(table_header[upper_index]-table_header[lower_index]));
+					raise notice 'speed=%; alpha=%;',speed,alpha;
 					if speed is null then 
 						speed:=0;
 					end if;
@@ -1031,7 +1081,7 @@ end$$;
 -- демонстрация 
 
 call public.sp_get_temperature_air(-23);
-call public.sp_get_wind_correction(75,0);
+call public.sp_get_wind_correction(75,2);
 
 
 
